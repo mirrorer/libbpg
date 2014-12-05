@@ -1,0 +1,100 @@
+BPG Image Encoder and Decoder
+-----------------------------
+
+1) Quick introduction
+---------------------
+
+- Edit the Makefile to change the compile options (the default compile
+  options should be OK for Linux). Type 'make' to compile and 'make
+  install' to install the compiled binaries.
+
+- x265 usage: for much increased compression speed (but lower
+  quality), you can compile and install x265 and then enable its use
+  in the Makefile. x265 is used when the compression level ('-m'
+  option of bpgenc) is < 9. Unfortunately, x265 does not support yet
+  the monochrome format or the lossless mode, so the JCTVC code is
+  still required in these cases. With a default x265 compilation, only
+  8 bit depth is supported (hence you must force a bit depth of 8 with
+  '-b 8').
+
+- Emscripten usage: in order to generate the Javascript decoder, you
+  must install Emscripten and enable its use in the Makefile.
+
+- An HTML demonstration (with a precompiled Javascript decoder) is
+  available in html/index.html. The Javascript decoder has a hardcoded
+  maximum memory usage of 32MB, which is enough for 1920x1080
+  pictures. You can modify it in the Makefile to optimize it for your
+  needs.
+
+- The BPG file format is specified in doc/bpg_spec.txt.
+
+2) BPG encoding tips
+--------------------
+
+- bpgenc is slow because it uses by default the reference HEVC
+  encoder. It can also use x265 but currently x265 does not support
+  all the features (in particular the monochrome mode) and gives a
+  lower quality. It is expected that x265 (or another HEVC encoder)
+  will become quickly better.
+
+- A bit depth of 10 is used by default in order to slightly increase
+  the compression ratio (rounding errors are reduced). You can still
+  force the wanted bit depth with the '-b' option.
+
+- Lossless compression is supported as a bonus thru the HEVC lossless
+  capabilities. Use a PNG input in this case unless you know what you
+  do ! In case of a JPEG input, the compression is lossless related to
+  the JPEG YCbCr data, not the RGB data. In any case, the bit depth
+  should match the one of your picture otherwise the file size
+  increases a lot. By default the lossless mode sets the bit depth to
+  8 bits. The prefered color space is set to "rgb". Note: lossless
+  mode is less tested that the lossy mode but it usually gives better
+  results that PNG on photographic images.
+
+- There is a difference of interpreation of the quantizer parameter
+  (-q option) between the x265 and JCTVC encoder. The default value is
+  optimized for the JCTVC encoder, not for x265. We will try to align
+  the x265 value to JCTVC in the future.
+
+- By default, the JCTVC encoder is limited to a precision of 12
+  bits. You can enable high bit depths (up to 14) by enabling the
+  Makefile define: USE_JCTVC_HIGH_BIT_DEPTH. The encoder is sligthly
+  slower in this case.
+
+3) FFmpeg modifications
+-----------------------
+
+- Completed support of chroma_format_idc = 0 (monochrome mode).
+
+- Fixed RDPCM support (intra predictions).
+
+- Added a 'dynamic bit depth' mode where all the bit depths from 8 to
+  14 are supported without code duplication but slower decoding.
+
+- Added a modified SPS header to reduce the size of the BPG decoder
+  (the solution instead is to generate standard VPS and SPS headers
+  from the BPG header).
+
+- Added defines to keep only the HEVC intra code and suppress the
+  parsing of all the irrelevant NAL units.
+
+- Stripped FFmpeg from all codecs except HEVC and the necessary
+  support code.
+
+- Generated the IDCT coefficients dynamically to reduce the code size.
+
+4) Licensing
+------------
+
+  - libbpg and bpgenc are released under the LGPL license (the FFmpeg
+    part is under the LGPL, the BPG specific part is released under
+    the BSD license).
+
+  - bpgenc is released under the BSD license (it includes the JCTVC
+    code which is released under the BSD license. The BPG specific
+    part is released under the BSD license).
+
+  - BPG relies on the HEVC compression technology which may be
+    protected by patents in some countries. Most devices already
+    include or will include hardware HEVC support, so we suggest to
+    use it if patents are an issue.
