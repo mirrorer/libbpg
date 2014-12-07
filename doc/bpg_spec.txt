@@ -1,5 +1,7 @@
 BPG Specification
 
+version 0.9.1
+
 Copyright (c) 2014 Fabrice Bellard
 
 1) Introduction
@@ -15,7 +17,8 @@ In the YCbCr case, the chroma can be subsampled by a factor of two in
 horizontal or both in horizontal or vertical directions (4:4:4, 4:2:2
 or 4:2:0 formats). The chroma is sampled at the same position relative
 to the luma as in the JPEG format [2] and uses the full range of
-values. Arbitrary meta data (such as EXIF [3]) are supported.
+values. Arbitrary metadata (such as EXIF, ICC profile, XMP) are
+supported.
 
 2) Bitstream conventions
 ------------------------
@@ -161,9 +164,6 @@ hevc_data()
      minus 8. In this version of the specification, bit_depth_minus_8
      shall be 2.
 
-     'exif_present_flag' indicates that EXIF meta data (Exchangeable
-     image file format) data are present.
-     
      'extension_present_flag' indicates that extension data are
      present. These data are ignored by the current decoders.
 
@@ -217,8 +217,16 @@ hevc_data()
      'extension_data()' is the extension data.
 
      'extension_tag' is the extension tag. The following values are defined:
+
        1: EXIF data.
-     
+
+       2: ICC profile (see [4])
+
+       3: XMP (see [5])
+
+       4: Thumbnail (the thumbnail shall be a lower resolution version
+       of the image stored in BPG format).
+
      The decoder shall ignore the tags it does not support.
 
      'extension_tag_length' is the length in bytes of the extension tag.
@@ -354,6 +362,13 @@ information.
   code which is not useful. It is still possible to reconstruct a
   standard HEVC stream to feed an unmodified hardware decoder if needed.
 
+- Extensions: the metadata are stored at the beginning of the file so
+  that they can be read at the same time as the header. Since metadata
+  tend to evolve faster than the image formats, we left room for
+  extension by using a (tag, lengh) representation. The decoder can
+  easily skip all the metadata because their length is explicitly
+  stored in the image header.
+
 5) References
 -------------
 
@@ -362,3 +377,8 @@ information.
 [2] JPEG Standard (JPEG ISO/IEC 10918-1 ITU-T Recommendation T.81)
 
 [3] EXIF version 2.2 (JEITA CP-3451)
+
+[4] The International Color Consortium ( http://www.color.org/ )
+
+[5]  Extensible Metadata Platform (XMP) http://www.adobe.com/devnet/xmp.html
+

@@ -71,6 +71,9 @@ struct BPGDecoderContext {
     uint8_t has_alpha;
     uint8_t bit_depth;
     BPGColorSpaceEnum color_space;
+    int keep_extension_data; /* true if the extension data must be
+                                kept during parsing */
+    BPGExtensionData *first_md;
 
     /* the following is used for format conversion */
     uint8_t is_rgba;
@@ -327,6 +330,8 @@ uint8_t *bpg_decoder_get_data(BPGDecoderContext *img, int *pline_size, int plane
 
 int bpg_decoder_get_info(BPGDecoderContext *img, BPGImageInfo *p)
 {
+    if (!img->frame)
+        return -1;
     p->width = img->w;
     p->height = img->h;
     p->format = img->format;
@@ -360,29 +365,59 @@ static inline int clamp8(int a)
         return a;
 }
 
-#define IC0 40
-#define IC1 (-11)
-#define IC2 4
-#define IC3 (-1)
+/* 7 tap Lanczos interpolator */
+#define IC0 (-1)
+#define IC1 4
+#define IC2 (-10)
+#define IC3 57
+#define IC4 18
+#define IC5 (-6)
+#define IC6 2
 
-/* interpolate by a factor of two */
+/* interpolate by a factor of two assuming chroma is between the luma
+   samples. */
 static void interp2_simple(PIXEL *dst, const PIXEL *src, int n, int bit_depth)
 {
-    int pixel_max;
+    int pixel_max, a0, a1, a2, a3, a4, a5, a6;
 
     pixel_max = (1 << bit_depth) - 1;
+
+    a1 = src[-3];
+    a2 = src[-2];
+    a3 = src[-1];
+    a4 = src[0];
+    a5 = src[1];
+    a6 = src[2];
+
     while (n >= 2) {
-        dst[0] = src[0];
-        dst[1] = clamp_pix(((src[-3] + src[4]) * IC3 + 
-                            (src[-2] + src[3]) * IC2 + 
-                            (src[-1] + src[2]) * IC1 + 
-                            (src[0] + src[1]) * IC0 + 32) >> 6, pixel_max);
+        a0 = a1;
+        a1 = a2;
+        a2 = a3;
+        a3 = a4;
+        a4 = a5;
+        a5 = a6;
+        a6 = src[3];
+        dst[0] = clamp_pix((a0 * IC6 + a1 * IC5 + a2 * IC4 + a3 * IC3 + 
+                            a4 * IC2 + a5 * IC1 + a6 * IC0 + 32) >> 6, 
+                           pixel_max);
+        dst[1] = clamp_pix((a0 * IC0 + a1 * IC1 + a2 * IC2 + a3 * IC3 +
+                            a4 * IC4 + a5 * IC5 + a6 * IC6 + 32) >> 6, 
+                           pixel_max);
         dst += 2;
         src++;
         n -= 2;
     }
     if (n) {
-        dst[0] = src[0];
+        a0 = a1;
+        a1 = a2;
+        a2 = a3;
+        a3 = a4;
+        a4 = a5;
+        a5 = a6;
+        a6 = src[3];
+        dst[0] = clamp_pix((a0 * IC6 + a1 * IC5 + a2 * IC4 + a3 * IC3 + 
+                            a4 * IC2 + a5 * IC1 + a6 * IC0 + 32) >> 6, 
+                           pixel_max);
     }
 }
 
@@ -410,58 +445,88 @@ static void interp2_h(PIXEL *dst, const PIXEL *src, int n, int bit_depth)
 static void interp2_simple2(PIXEL *dst, const int16_t *src, int n, 
                             int bit_depth)
 {
-    int shift1, offset1, shift0, offset0, pixel_max;
+    int shift, offset, pixel_max, a0, a1, a2, a3, a4, a5, a6;
 
     pixel_max = (1 << bit_depth) - 1;
-    shift0 = 14 - bit_depth;
-    offset0 = (1 << shift0) >> 1;
-    shift1 = 20 - bit_depth;
-    offset1 = 1 << (shift1 - 1);
+    shift = 20 - bit_depth;
+    offset = 1 << (shift - 1);
+
+    a1 = src[-3];
+    a2 = src[-2];
+    a3 = src[-1];
+    a4 = src[0];
+    a5 = src[1];
+    a6 = src[2];
 
     while (n >= 2) {
-        dst[0] = clamp_pix((src[0] + offset0) >> shift0, pixel_max);
-        dst[1] = clamp_pix(((src[-3] + src[4]) * IC3 + 
-                            (src[-2] + src[3]) * IC2 + 
-                            (src[-1] + src[2]) * IC1 + 
-                            (src[0] + src[1]) * IC0 + offset1) >> shift1,
+        a0 = a1;
+        a1 = a2;
+        a2 = a3;
+        a3 = a4;
+        a4 = a5;
+        a5 = a6;
+        a6 = src[3];
+        dst[0] = clamp_pix((a0 * IC6 + a1 * IC5 + a2 * IC4 + a3 * IC3 +
+                            a4 * IC2 + a5 * IC1 + a6 * IC0 + offset) >> shift,
+                           pixel_max);
+        dst[1] = clamp_pix((a0 * IC0 + a1 * IC1 + a2 * IC2 + a3 * IC3 +
+                            a4 * IC4 + a5 * IC5 + a6 * IC6 + offset) >> shift,
                            pixel_max);
         dst += 2;
         src++;
         n -= 2;
     }
     if (n) {
-        dst[0] = clamp_pix((src[0] + offset0) >> shift0, pixel_max);
+        a0 = a1;
+        a1 = a2;
+        a2 = a3;
+        a3 = a4;
+        a4 = a5;
+        a5 = a6;
+        a6 = src[3];
+        dst[0] = clamp_pix((a0 * IC6 + a1 * IC5 + a2 * IC4 + a3 * IC3 +
+                            a4 * IC2 + a5 * IC1 + a6 * IC0 + offset) >> shift, 
+                           pixel_max);
     }
 }
 
 /* y_pos is the position of the sample '0' in the 'src' circular
    buffer. tmp is a temporary buffer of length (n2 + 2 * ITAPS - 1) */
 static void interp2_vh(PIXEL *dst, PIXEL **src, int n, int y_pos,
-                       int16_t *tmp_buf, int bit_depth)
+                       int16_t *tmp_buf, int bit_depth, int frac_pos)
 {
-    const PIXEL *src0, *src1, *src2, *src3, *src4, *src5, *src6, *src7;
+    const PIXEL *src0, *src1, *src2, *src3, *src4, *src5, *src6;
     int i, n2, shift;
     PIXEL v;
 
-    src0 = src[(y_pos - 3) & 7]; 
-    src1 = src[(y_pos - 2) & 7]; 
-    src2 = src[(y_pos - 1) & 7]; 
-    src3 = src[(y_pos + 0) & 7]; 
-    src4 = src[(y_pos + 1) & 7]; 
-    src5 = src[(y_pos + 2) & 7]; 
-    src6 = src[(y_pos + 3) & 7]; 
-    src7 = src[(y_pos + 4) & 7]; 
+    src0 = src[(y_pos - 3) & 7];
+    src1 = src[(y_pos - 2) & 7];
+    src2 = src[(y_pos - 1) & 7];
+    src3 = src[(y_pos + 0) & 7];
+    src4 = src[(y_pos + 1) & 7];
+    src5 = src[(y_pos + 2) & 7];
+    src6 = src[(y_pos + 3) & 7];
 
     /* vertical interpolation first */
-    /* XXX: should round */
+    /* XXX: should round but not critical */
     shift = bit_depth - 8;
     n2 = (n + 1) / 2;
-    for(i = 0; i < n2; i++) {
-        tmp_buf[ITAPS2 - 1 + i] = 
-            ((src0[i] + src7[i]) * IC3 + 
-             (src1[i] + src6[i]) * IC2 + 
-             (src2[i] + src5[i]) * IC1 + 
-             (src3[i] + src4[i]) * IC0) >> shift;
+    if (frac_pos == 0) {
+        for(i = 0; i < n2; i++) {
+            tmp_buf[ITAPS2 - 1 + i] = 
+                (src0[i] * IC6 + src1[i] * IC5 + 
+                 src2[i] * IC4 + src3[i] * IC3 + 
+                 src4[i] * IC2 + src5[i] * IC1 + 
+                 src6[i] * IC0) >> shift;
+        }
+    } else {
+        for(i = 0; i < n2; i++) {
+            tmp_buf[ITAPS2 - 1 + i] = 
+                (src0[i] * IC0 + src1[i] * IC1 + 
+                 src2[i] * IC2 + src3[i] * IC3 + 
+                 src4[i] * IC4 + src5[i] * IC5 + 
+                 src6[i] * IC6) >> shift;
+        }
     }
 
     /* then horizontal interpolation */
@@ -932,13 +997,15 @@ int bpg_decoder_get_line(BPGDecoderContext *s, void *rgb_line1)
         y2 = y >> 1;
         pos = y2 % ITAPS;
         if ((y & 1) == 0) {
-            interp2_h(s->cb_buf2, s->cb_buf3[pos], w, s->bit_depth);
-            interp2_h(s->cr_buf2, s->cr_buf3[pos], w, s->bit_depth);
+            interp2_vh(s->cb_buf2, s->cb_buf3, w, pos, s->c_buf4,
+                       s->bit_depth, 0);
+            interp2_vh(s->cr_buf2, s->cr_buf3, w, pos, s->c_buf4,
+                       s->bit_depth, 0);
         } else {
             interp2_vh(s->cb_buf2, s->cb_buf3, w, pos, s->c_buf4,
-                       s->bit_depth);
+                       s->bit_depth, 1);
             interp2_vh(s->cr_buf2, s->cr_buf3, w, pos, s->c_buf4,
-                       s->bit_depth);
+                       s->bit_depth, 1);
 
             /* add a new line in the circular buffer */
             pos = (pos + ITAPS2 + 1) % ITAPS;
@@ -1017,7 +1084,7 @@ int bpg_decoder_start(BPGDecoderContext *s, BPGDecoderOutputFormat out_fmt)
 {
     int ret;
 
-    if (s->y >= 0)
+    if (!s->frame || s->y >= 0)
         return -1;
     ret = bpg_decoder_output_init(s, out_fmt);
     if (ret)
@@ -1026,94 +1093,171 @@ int bpg_decoder_start(BPGDecoderContext *s, BPGDecoderOutputFormat out_fmt)
     return 0;
 }
 
-BPGDecoderContext *bpg_decoder_open(const uint8_t *buf, int buf_len)
+BPGDecoderContext *bpg_decoder_open(void)
 {
-    int idx, ret, has_alpha, format, bit_depth, chroma_format_idc, color_space;
-    uint32_t width, height, flags1, flags2, ycc_data_len, alpha_data_len;
-    uint32_t extension_data_len;
-    int has_extension;
-    BPGDecoderContext *img;
-    
-    if (buf_len < 6)
+    BPGDecoderContext *s;
+
+    s = av_mallocz(sizeof(BPGDecoderContext));
+    if (!s)
         return NULL;
+    return s;
+}
+
+typedef struct {
+    int width, height;
+    BPGImageFormatEnum format;
+    uint8_t has_alpha;
+    uint8_t bit_depth;
+    BPGColorSpaceEnum color_space;
+    uint32_t ycc_data_len;
+    uint32_t alpha_data_len;
+    BPGExtensionData *first_md;
+} BPGHeaderData;
+
+static int bpg_decode_header(BPGHeaderData *h,
+                             const uint8_t *buf, int buf_len,
+                             int header_only, int load_extensions)
+{
+    int idx, flags1, flags2, has_extension, ret;
+    uint32_t extension_data_len;
+
+    if (buf_len < 6)
+        return -1;
     /* check magic */
     if (buf[0] != ((BPG_HEADER_MAGIC >> 24) & 0xff) ||
         buf[1] != ((BPG_HEADER_MAGIC >> 16) & 0xff) ||
         buf[2] != ((BPG_HEADER_MAGIC >> 8) & 0xff) ||
         buf[3] != ((BPG_HEADER_MAGIC >> 0) & 0xff))
-        return NULL;
+        return -1;
     idx = 4;
     flags1 = buf[idx++];
-    format = flags1 >> 5;
-    if (format > 3)
-        return NULL;
-    has_alpha = (flags1 >> 4) & 1;
-    bit_depth = (flags1 & 0xf) + 8;
-    if (bit_depth > 14)
-        return NULL;
+    h->format = flags1 >> 5;
+    if (h->format > 3)
+        return -1;
+    h->has_alpha = (flags1 >> 4) & 1;
+    h->bit_depth = (flags1 & 0xf) + 8;
+    if (h->bit_depth > 14)
+        return -1;
     flags2 = buf[idx++];
-    color_space = (flags2 >> 4) & 0xf;
+    h->color_space = (flags2 >> 4) & 0xf;
     has_extension = (flags2 >> 3) & 1;
-    if (color_space >= BPG_CS_COUNT || 
-        (format == BPG_FORMAT_GRAY && color_space != 0) ||
-        ((color_space == BPG_CS_YCbCrK || color_space == BPG_CS_CMYK) &&
-         !has_alpha))
-        return NULL;
-    ret = get_ue(&width, buf + idx, buf_len - idx);
+    if (h->color_space >= BPG_CS_COUNT || 
+        (h->format == BPG_FORMAT_GRAY && h->color_space != 0) ||
+        ((h->color_space == BPG_CS_YCbCrK || h->color_space == BPG_CS_CMYK) &&
+         !h->has_alpha))
+        return -1;
+    ret = get_ue(&h->width, buf + idx, buf_len - idx);
     if (ret < 0)
-        return NULL;
+        return -1;
     idx += ret;
-    ret = get_ue(&height, buf + idx, buf_len - idx);
+    ret = get_ue(&h->height, buf + idx, buf_len - idx);
     if (ret < 0)
-        return NULL;
+        return -1;
     idx += ret;
+    if (h->width == 0 || h->height == 0)
+        return -1;
+    if (header_only)
+        return idx;
 
-    ret = get_ue(&ycc_data_len, buf + idx, buf_len - idx);
+    ret = get_ue(&h->ycc_data_len, buf + idx, buf_len - idx);
     if (ret < 0)
-        return NULL;
+        return -1;
     idx += ret;
            
     extension_data_len = 0;
     if (has_extension) {
         ret = get_ue(&extension_data_len, buf + idx, buf_len - idx);
         if (ret < 0)
-            return NULL;
+            return -1;
         idx += ret;
     }
 
-    alpha_data_len = 0;
-    if (has_alpha) {
-        ret = get_ue(&alpha_data_len, buf + idx, buf_len - idx);
+    h->alpha_data_len = 0;
+    if (h->has_alpha) {
+        ret = get_ue(&h->alpha_data_len, buf + idx, buf_len - idx);
         if (ret < 0)
-            return NULL;
+            return -1;
         idx += ret;
     }
 
+    h->first_md = NULL;
+    if (has_extension) {
+        int ext_end;
 
-    img = av_mallocz(sizeof(BPGDecoderContext));
-    if (!img)
-        return NULL;
+        ext_end = idx + extension_data_len;
+        if (ext_end > buf_len)
+            return -1;
+#ifndef EMSCRIPTEN
+        if (load_extensions) {
+            BPGExtensionData *md, **plast_md;
+
+            plast_md = &h->first_md;
+            while (idx < ext_end) {
+                md = av_malloc(sizeof(BPGExtensionData));
+                *plast_md = md;
+                plast_md = &md->next;
+
+                ret = get_ue(&md->tag, buf + idx, ext_end - idx);
+                if (ret < 0) 
+                    goto fail;
+                idx += ret;
+
+                ret = get_ue(&md->buf_len, buf + idx, ext_end - idx);
+                if (ret < 0) 
+                    goto fail;
+                idx += ret;
+                
+                if (idx + md->buf_len > ext_end) {
+                fail:
+                    bpg_decoder_free_extension_data(h->first_md);
+                    return -1;
+                }
+                md->buf = av_malloc(md->buf_len);
+                memcpy(md->buf, buf + idx, md->buf_len);
+                idx += md->buf_len;
+            }
+        } else
+#endif
+        {
+            /* skip extension data */
+            idx += extension_data_len;
+        }
+    }
+    return idx;
+}
+
+int bpg_decoder_decode(BPGDecoderContext *img, const uint8_t *buf, int buf_len)
+{
+    int idx, has_alpha, format, bit_depth, chroma_format_idc, color_space;
+    uint32_t width, height;
+    BPGHeaderData h_s, *h = &h_s;
+
+    idx = bpg_decode_header(h, buf, buf_len, 0, img->keep_extension_data);
+    if (idx < 0)
+        return idx;
+    width = h->width;
+    height = h->height;
+    format = h->format;
+    has_alpha = h->has_alpha;
+    color_space = h->color_space;
+    bit_depth = h->bit_depth;
+    
     img->w = width;
     img->h = height;
     img->format = format;
     img->has_alpha = has_alpha;
     img->color_space = color_space;
     img->bit_depth = bit_depth;
+    img->first_md = h->first_md;
 
-    if (has_extension) {
-        if (idx + extension_data_len > buf_len)
-            goto fail;
-        idx += extension_data_len;
-    }
-
-    if (idx + ycc_data_len > buf_len)
+    if (idx + h->ycc_data_len > buf_len)
         goto fail;
     chroma_format_idc = format;
-    img->frame = hevc_decode(buf + idx, ycc_data_len,
+    img->frame = hevc_decode(buf + idx, h->ycc_data_len,
                              width, height, chroma_format_idc, bit_depth);
     if (!img->frame)
         goto fail;
-    idx += ycc_data_len;
+    idx += h->ycc_data_len;
 
     if (img->frame->width < img->w || img->frame->height < img->h)
         goto fail;
@@ -1144,21 +1288,26 @@ BPGDecoderContext *bpg_decoder_open(const uint8_t *buf, int buf_len)
     }
     
     if (has_alpha) {
-        if (idx + alpha_data_len > buf_len)
+        if (idx + h->alpha_data_len > buf_len)
             goto fail;
-        img->alpha_frame = hevc_decode(buf + idx, alpha_data_len,
+        img->alpha_frame = hevc_decode(buf + idx, h->alpha_data_len,
                                        width, height, 0, bit_depth);
         if (!img->alpha_frame)
             goto fail;
-        idx += alpha_data_len;
+        idx += h->alpha_data_len;
     }
 
     img->y = -1;
-    return img;
+    return 0;
 
  fail:
-    bpg_decoder_close(img);
-    return NULL;
+    if (img->frame)
+        av_frame_free(&img->frame);
+    if (img->alpha_frame)
+        av_frame_free(&img->alpha_frame);
+    bpg_decoder_free_extension_data(img->first_md);
+    img->first_md = NULL;
+    return -1;
 }
 
 void bpg_decoder_close(BPGDecoderContext *s)
@@ -1168,58 +1317,58 @@ void bpg_decoder_close(BPGDecoderContext *s)
         av_frame_free(&s->frame);
     if (s->alpha_frame)
         av_frame_free(&s->alpha_frame);
+    bpg_decoder_free_extension_data(s->first_md);
     av_free(s);
 }
 
+void bpg_decoder_free_extension_data(BPGExtensionData *first_md)
+{
 #ifndef EMSCRIPTEN
-int bpg_decoder_get_info_from_buf(BPGImageInfo *p,
+    BPGExtensionData *md, *md_next;
+    
+    for(md = first_md; md != NULL; md = md_next) {
+        md_next = md->next;
+        av_free(md->buf);
+        av_free(md);
+    }
+#endif
+}
+
+
+#ifndef EMSCRIPTEN
+void bpg_decoder_keep_extension_data(BPGDecoderContext *s, int enable)
+{
+    s->keep_extension_data = enable;
+}
+
+BPGExtensionData *bpg_decoder_get_extension_data(BPGDecoderContext *s)
+{
+    return s->first_md;
+}
+
+int bpg_decoder_get_info_from_buf(BPGImageInfo *p, 
+                                  BPGExtensionData **pfirst_md,
                                   const uint8_t *buf, int buf_len)
 {
-    int flags1, flags2, idx, format, color_space, has_alpha, bit_depth;
-    int ret, width, height;
+    BPGHeaderData h_s, *h = &h_s;
+    int parse_extension;
 
-    if (buf_len < 6)
+    parse_extension = (pfirst_md != NULL);
+    if (bpg_decode_header(h, buf, buf_len, 
+                          !parse_extension, parse_extension) < 0)
         return -1;
-    /* check magic */
-    if (buf[0] != ((BPG_HEADER_MAGIC >> 24) & 0xff) ||
-        buf[1] != ((BPG_HEADER_MAGIC >> 16) & 0xff) ||
-        buf[2] != ((BPG_HEADER_MAGIC >> 8) & 0xff) ||
-        buf[3] != ((BPG_HEADER_MAGIC >> 0) & 0xff))
-        return -1;
-    idx = 4;
-    flags1 = buf[idx++];
-    format = flags1 >> 5;
-    if (format > 3)
-        return -1;
-    has_alpha = (flags1 >> 4) & 1;
-    bit_depth = (flags1 & 0xf) + 8;
-    if (bit_depth > 14)
-        return -1;
-    flags2 = buf[idx++];
-    color_space = (flags2 >> 4) & 0xf;
-    if (color_space >= BPG_CS_COUNT || 
-        (format == BPG_FORMAT_GRAY && color_space != 0) ||
-        ((color_space == BPG_CS_YCbCrK || color_space == BPG_CS_CMYK) &&
-         !has_alpha))
-        return -1;
-    ret = get_ue(&width, buf + idx, buf_len - idx);
-    if (ret < 0)
-        return -1;
-    idx += ret;
-    ret = get_ue(&height, buf + idx, buf_len - idx);
-    if (ret < 0)
-        return -1;
-    p->width = width;
-    p->height = height;
-    p->format = format;
-    if (color_space == BPG_CS_YCbCrK || 
-        color_space == BPG_CS_CMYK)
+    p->width = h->width;
+    p->height = h->height;
+    p->format = h->format;
+    if (h->color_space == BPG_CS_YCbCrK || 
+        h->color_space == BPG_CS_CMYK)
         p->has_alpha = 0;
     else
-        p->has_alpha = has_alpha;
-    p->color_space = color_space;
-    p->bit_depth = bit_depth;
+        p->has_alpha = h->has_alpha;
+    p->color_space = h->color_space;
+    p->bit_depth = h->bit_depth;
+    if (pfirst_md)
+        *pfirst_md = h->first_md;
     return 0;
 }
 #endif
-

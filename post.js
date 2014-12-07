@@ -27,17 +27,25 @@ window['BPGDecoder'] = function(ctx) {
     this['onload'] = null;
 }
 
-window['BPGDecoder'].prototype.bpg_decoder_open = Module['cwrap']('bpg_decoder_open', 'number', [ 'array', 'number' ]);
+window['BPGDecoder'].prototype = {
 
-window['BPGDecoder'].prototype.bpg_decoder_get_info = Module['cwrap']('bpg_decoder_get_info', 'number', [ 'number', 'number' ]);
+malloc: Module['cwrap']('malloc', 'number', [ 'number' ]),
 
-window['BPGDecoder'].prototype.bpg_decoder_start = Module['cwrap']('bpg_decoder_start', 'number', [ 'number', 'number' ]);
+free: Module['cwrap']('free', 'void', [ 'number' ]),
 
-window['BPGDecoder'].prototype.bpg_decoder_get_line = Module['cwrap']('bpg_decoder_get_line', 'number', [ 'number', 'number' ]);
+bpg_decoder_open: Module['cwrap']('bpg_decoder_open', 'number', [ ]),
 
-window['BPGDecoder'].prototype.bpg_decoder_close = Module['cwrap']('bpg_decoder_close', 'void', [ 'number' ] );
+bpg_decoder_decode: Module['cwrap']('bpg_decoder_decode', 'number', [ 'number', 'array', 'number' ]),
 
-window['BPGDecoder'].prototype.load = function(url)
+bpg_decoder_get_info: Module['cwrap']('bpg_decoder_get_info', 'number', [ 'number', 'number' ]),
+
+bpg_decoder_start: Module['cwrap']('bpg_decoder_start', 'number', [ 'number', 'number' ]),
+
+bpg_decoder_get_line: Module['cwrap']('bpg_decoder_get_line', 'number', [ 'number', 'number' ]),
+
+bpg_decoder_close: Module['cwrap']('bpg_decoder_close', 'void', [ 'number' ] ),
+
+load: function(url) 
 {
     var request = new XMLHttpRequest();
     var this1 = this;
@@ -48,9 +56,9 @@ window['BPGDecoder'].prototype.load = function(url)
         this1._onload(request, event);
     };
     request.send();
-}
+},
 
-window['BPGDecoder'].prototype._onload = function(request, event)
+_onload: function(request, event)
 {
     var data = request.response;
     var array = new Uint8Array(data);
@@ -59,26 +67,27 @@ window['BPGDecoder'].prototype._onload = function(request, event)
 
     //    console.log("loaded " + data.byteLength + " bytes");
 
-    img = this.bpg_decoder_open(array, array.length);
-    if (img == 0) {
+    img = this.bpg_decoder_open();
+
+    if (this.bpg_decoder_decode(img, array, array.length) < 0) {
         console.log("could not decode image");
         return;
     }
     
-    img_info_buf = Module['_malloc'](6 * 4);
+    img_info_buf = this.malloc(6 * 4);
     this.bpg_decoder_get_info(img, img_info_buf);
     /* extract the image info */
     heap32 = Module['HEAPU32'];
     w = heap32[img_info_buf >> 2];
     h = heap32[(img_info_buf + 4) >> 2];
-    Module['_free'](img_info_buf);
+    this.free(img_info_buf);
 
 //    console.log("image " + w + " " + h);
     
     /* select RGBA32 output */
     this.bpg_decoder_start(img, 1);
 
-    rgba_line = Module['_malloc'](w * 4);
+    rgba_line = this.malloc(w * 4);
     cimg = this.ctx.createImageData(w, h);
     dst = cimg.data;
     p0 = 0;
@@ -91,7 +100,7 @@ window['BPGDecoder'].prototype._onload = function(request, event)
         }
     }
 
-    Module['_free'](rgba_line);
+    this.free(rgba_line);
 
     this.bpg_decoder_close(img);
 
@@ -100,6 +109,8 @@ window['BPGDecoder'].prototype._onload = function(request, event)
     if (this['onload'])
         this['onload']();
 }
+
+};
 
 window.onload = function() { 
     var i, n, el, tab, tab1, url, dec, canvas, id, style, ctx;

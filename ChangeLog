@@ -1,0 +1,9 @@
+version 0.9.1:
+
+- Added new meta data tags: ICC profile, XMP and thumbnail.
+- Disabled metadata copying by default.
+- Use same chroma pixel position as JPEG for 4:2:2 and 4:2:0.
+
+version 0.9:
+
+- Initial release.

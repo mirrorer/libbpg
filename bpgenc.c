@@ -27,6 +27,7 @@
 #include <inttypes.h>
 #include <getopt.h>
 #include <math.h>
+#include <assert.h>
 
 #include <png.h>
 #include <jpeglib.h>
@@ -351,13 +352,13 @@ static void gray_neg_c(ColorConvertState *s, PIXEL *y_ptr, int n)
 
 /* decimation */
 
-#define DTAPS2 7
-#define DTAPS (2 * DTAPS2 + 1)
-#define DC0 64
-#define DC1 40
-#define DC2 (-11)
-#define DC3 4
-#define DC4 (-1)
+#define DTAPS2 5
+#define DTAPS (2 * DTAPS2)
+#define DC0 57
+#define DC1 17
+#define DC2 (-8)
+#define DC3 (-4)
+#define DC4 2
 
 static void decimate2_simple(PIXEL *dst, PIXEL *src, int n, int bit_depth)
 {
@@ -365,11 +366,11 @@ static void decimate2_simple(PIXEL *dst, PIXEL *src, int n, int bit_depth)
     pixel_max = (1 << bit_depth) - 1;
     n2 = (n + 1) / 2;
     for(i = 0; i < n2; i++) {
-        dst[i] = clamp_pix(((src[-7] + src[7]) * DC4 + 
-                            (src[-5] + src[5]) * DC3 + 
-                            (src[-3] + src[3]) * DC2 + 
-                            (src[-1] + src[1]) * DC1 + 
-                            src[0] * DC0 + 64) >> 7, pixel_max);
+        dst[i] = clamp_pix(((src[-4] + src[5]) * DC4 + 
+                            (src[-3] + src[4]) * DC3 + 
+                            (src[-2] + src[3]) * DC2 + 
+                            (src[-1] + src[2]) * DC1 + 
+                            (src[0] + src[1]) * DC0 + 64) >> 7, pixel_max);
         src += 2;
     }
 }
@@ -401,11 +402,11 @@ static void decimate2_simple16(int16_t *dst, PIXEL *src, int n, int bit_depth)
     rnd = 1 << (shift - 1);
     n2 = (n + 1) / 2;
     for(i = 0; i < n2; i++) {
-        dst[i] = ((src[-7] + src[7]) * DC4 + 
-                  (src[-5] + src[5]) * DC3 + 
-                  (src[-3] + src[3]) * DC2 + 
-                  (src[-1] + src[1]) * DC1 + 
-                  src[0] * DC0 + rnd) >> shift;
+        dst[i] = ((src[-4] + src[5]) * DC4 + 
+                  (src[-3] + src[4]) * DC3 + 
+                  (src[-2] + src[3]) * DC2 + 
+                  (src[-1] + src[2]) * DC1 + 
+                  (src[0] + src[1]) * DC0 + rnd) >> shift;
         src += 2;
     }
 }
@@ -432,37 +433,39 @@ static void decimate2_h16(int16_t *dst, PIXEL *src, int n, PIXEL *src1,
 static void decimate2_v(PIXEL *dst, int16_t **src, int pos, int n,
                         int bit_depth)
 {
-    int16_t *src0, *src1, *src3, *src5, *src7, *srcm1, *srcm3, *srcm5, *srcm7;
+    int16_t *src0, *src1, *src2, *src3, *src4, *src5, *srcm1, *srcm2, *srcm3, *srcm4;
     int i, shift, offset, pixel_max;
 
-    pos = sub_mod_int(pos, 7, DTAPS);
-    srcm7 = src[pos];
-    pos = add_mod_int(pos, 2, DTAPS);
-    srcm5 = src[pos];
-    pos = add_mod_int(pos, 2, DTAPS);
+    pos = sub_mod_int(pos, 4, DTAPS);
+    srcm4 = src[pos];
+    pos = add_mod_int(pos, 1, DTAPS);
     srcm3 = src[pos];
-    pos = add_mod_int(pos, 2, DTAPS);
+    pos = add_mod_int(pos, 1, DTAPS);
+    srcm2 = src[pos];
+    pos = add_mod_int(pos, 1, DTAPS);
     srcm1 = src[pos];
     pos = add_mod_int(pos, 1, DTAPS);
     src0 = src[pos];
     pos = add_mod_int(pos, 1, DTAPS);
     src1 = src[pos];
-    pos = add_mod_int(pos, 2, DTAPS);
+    pos = add_mod_int(pos, 1, DTAPS);
+    src2 = src[pos];
+    pos = add_mod_int(pos, 1, DTAPS);
     src3 = src[pos];
-    pos = add_mod_int(pos, 2, DTAPS);
+    pos = add_mod_int(pos, 1, DTAPS);
+    src4 = src[pos];
+    pos = add_mod_int(pos, 1, DTAPS);
     src5 = src[pos];
-    pos = add_mod_int(pos, 2, DTAPS);
-    src7 = src[pos];
     
     shift = 21 - bit_depth;
     offset = 1 << (shift - 1);
     pixel_max = (1 << bit_depth) - 1;
     for(i = 0; i < n; i++) {
-        dst[i] = clamp_pix(((srcm7[i] + src7[i]) * DC4 + 
-                            (srcm5[i] + src5[i]) * DC3 + 
-                            (srcm3[i] + src3[i]) * DC2 + 
-                            (srcm1[i] + src1[i]) * DC1 + 
-                            src0[i] * DC0 + offset) >> shift, pixel_max);
+        dst[i] = clamp_pix(((srcm4[i] + src5[i]) * DC4 + 
+                            (srcm3[i] + src4[i]) * DC3 + 
+                            (srcm2[i] + src3[i]) * DC2 + 
+                            (srcm1[i] + src2[i]) * DC1 + 
+                            (src0[i] + src1[i]) * DC0 + offset) >> shift, pixel_max);
     }
 }
 
@@ -523,13 +526,27 @@ static void decimate2_hv(uint8_t *dst, int dst_linesize,
     free(buf1);
 }
 
+static void get_plane_res(Image *img, int *pw, int *ph, int i)
+{
+    if (img->format == BPG_FORMAT_420 && (i == 1 || i == 2)) {
+        *pw = (img->w + 1) / 2;
+        *ph = (img->h + 1) / 2;
+    } else if (img->format == BPG_FORMAT_422 && (i == 1 || i == 2)) {
+        *pw = (img->w + 1) / 2;
+        *ph = img->h;
+    } else {
+        *pw = img->w;
+        *ph = img->h;
+    }
+}
+
 #define W_PAD 16
 
 Image *image_alloc(int w, int h, BPGImageFormatEnum format, int has_alpha,
                    BPGColorSpaceEnum color_space, int bit_depth)
 {
     Image *img;
-    int i, bpp, linesize, hshift, vshift, w1, h1, c_count;
+    int i, linesize, w1, h1, c_count;
 
     img = malloc(sizeof(Image));
     memset(img, 0, sizeof(*img));
@@ -540,19 +557,7 @@ Image *image_alloc(int w, int h, BPGImageFormatEnum format, int has_alpha,
     img->has_alpha = has_alpha;
     img->bit_depth = bit_depth;
     img->color_space = color_space;
-
-    switch(img->format) {
-    case BPG_FORMAT_420:
-        hshift = vshift = 1;
-        break;
-    case BPG_FORMAT_422:
-        hshift = 1;
-        vshift = 0;
-        break;
-    default:
-        hshift = vshift = 0;
-        break;
-    }
+    img->pixel_shift = 1;
 
     if (img->format == BPG_FORMAT_GRAY)
         c_count = 1;
@@ -561,24 +566,30 @@ Image *image_alloc(int w, int h, BPGImageFormatEnum format, int has_alpha,
     if (has_alpha)
         c_count++;
     for(i = 0; i < c_count; i++) {
-        bpp = 2;
-        w1 = w;
-        h1 = h;
+        get_plane_res(img, &w1, &h1, i);
         /* multiple of 16 pixels to add borders */
         w1 = (w1 + (W_PAD - 1)) & ~(W_PAD - 1);
         h1 = (h1 + (W_PAD - 1)) & ~(W_PAD - 1);
-        if (i == 1 || i == 2) {
-            if (hshift)
-                w1 = (w + 1) / 2;
-            if (vshift)
-                h1 = (h + 1) / 2;
-        }
         
-        linesize = w1 * bpp;
+        linesize = w1 << img->pixel_shift;
         img->data[i] = malloc(linesize * h1);
         img->linesize[i] = linesize;
     }
     return img;
+}
+
+void image_free(Image *img)
+{
+    int i, c_count;
+    if (img->format == BPG_FORMAT_GRAY)
+        c_count = 1;
+    else
+        c_count = 3;
+    if (img->has_alpha)
+        c_count++;
+    for(i = 0; i < c_count; i++)
+        free(img->data[i]);
+    free(img);
 }
 
 int image_ycc444_to_ycc422(Image *img)
@@ -586,7 +597,7 @@ int image_ycc444_to_ycc422(Image *img)
     uint8_t *data1;
     int w1, h1, bpp, linesize1, i, y;
 
-    if (img->format != BPG_FORMAT_444)
+    if (img->format != BPG_FORMAT_444 || img->pixel_shift != 1)
         return -1;
     bpp = 2;
     w1 = (img->w + 1) / 2;
@@ -613,7 +624,7 @@ int image_ycc444_to_ycc420(Image *img)
     uint8_t *data1;
     int w1, h1, bpp, linesize1, i;
 
-    if (img->format != BPG_FORMAT_444)
+    if (img->format != BPG_FORMAT_444 || img->pixel_shift != 1)
         return -1;
     bpp = 2;
     w1 = (img->w + 1) / 2;
@@ -641,6 +652,7 @@ void image_pad(Image *img, int cb_size)
     int w1, h1, x, y, c_count, c_w, c_h, c_w1, c_h1, h_shift, v_shift, c_idx;
     PIXEL *ptr, v, *ptr1;
 
+    assert(img->pixel_shift == 1);
     if (cb_size <= 1)
         return;
     w1 = (img->w + cb_size - 1) & ~(cb_size - 1);
@@ -691,7 +703,69 @@ void image_pad(Image *img, int cb_size)
     img->h = h1;
 }
 
-Image *read_png(FILE *f, BPGColorSpaceEnum color_space, int out_bit_depth)
+/* convert the 16 bit components to 8 bits */
+void image_convert16to8(Image *img)
+{
+    int w, h, stride, y, x, c_count, i;
+    uint8_t *plane;
+
+    if (img->bit_depth > 8 || img->pixel_shift != 1)
+        return;
+    if (img->format == BPG_FORMAT_GRAY)
+        c_count = 1;
+    else
+        c_count = 3;
+    if (img->has_alpha)
+        c_count++;
+    for(i = 0; i < c_count; i++) {
+        get_plane_res(img, &w, &h, i);
+        stride = w;
+        plane = malloc(stride * h);
+        for(y = 0; y < h; y++) {
+            const uint16_t *src;
+            uint8_t *dst;
+            dst = plane + stride * y;
+            src = (uint16_t *)(img->data[i] + img->linesize[i] * y);
+            for(x = 0; x < w; x++)
+                dst[x] = src[x];
+        }
+        free(img->data[i]);
+        img->data[i] = plane;
+        img->linesize[i] = stride;
+    }
+    img->pixel_shift = 0;
+}
+
+typedef struct BPGMetaData {
+    uint32_t tag;
+    uint8_t *buf;
+    int buf_len;
+    struct BPGMetaData *next;
+} BPGMetaData;
+
+BPGMetaData *bpg_md_alloc(uint32_t tag)
+{
+    BPGMetaData *md;
+    md = malloc(sizeof(BPGMetaData));
+    memset(md, 0, sizeof(*md));
+    md->tag = tag;
+    return md;
+}
+
+void bpg_md_free(BPGMetaData *md)
+{
+    BPGMetaData *md_next;
+
+    while (md != NULL) {
+        md_next = md->next;
+        free(md->buf);
+        free(md);
+        md = md_next;
+    }
+}
+
+Image *read_png(BPGMetaData **pmd,
+                FILE *f, BPGColorSpaceEnum color_space, int out_bit_depth)
 {
     png_structp png_ptr;
     png_infop info_ptr;
@@ -701,7 +775,8 @@ Image *read_png(FILE *f, BPGColorSpaceEnum color_space, int out_bit_depth)
     int y, has_alpha;
     BPGImageFormatEnum format;
     ColorConvertState cvt_s, *cvt = &cvt_s;
-
+    BPGMetaData *md, **plast_md, *first_md;
+    
     png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING,
                                      NULL, NULL, NULL);
     if (png_ptr == NULL) {
@@ -826,36 +901,148 @@ Image *read_png(FILE *f, BPGColorSpaceEnum color_space, int out_bit_depth)
         
     png_read_end(png_ptr, info_ptr);
     
+    /* get the ICC profile if present */
+    first_md = NULL;
+    plast_md = &first_md;
+    {
+        png_charp name;
+        int comp_type;
+        png_bytep iccp_buf;
+        png_uint_32 iccp_buf_len;
+        
+        if (png_get_iCCP(png_ptr, info_ptr,
+                         &name, &comp_type, &iccp_buf, &iccp_buf_len) == 
+            PNG_INFO_iCCP) {
+            md = bpg_md_alloc(BPG_EXTENSION_TAG_ICCP);
+            md->buf_len = iccp_buf_len;
+            md->buf = malloc(iccp_buf_len);
+            memcpy(md->buf, iccp_buf, iccp_buf_len);
+            *plast_md = md;
+            plast_md = &md->next;
+        }
+    }
+
     png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
     
+    *pmd = first_md;
     return img;
 }
 
-#define EXIF_MAX_LEN 65535
+static BPGMetaData *jpeg_get_metadata(jpeg_saved_marker_ptr first_marker)
+{
+    static const char app1_exif[] = "Exif";
+    static const char app1_xmp[] = "http://ns.adobe.com/xap/1.0/";
+    static const char app2_iccp[] = "ICC_PROFILE";
+    jpeg_saved_marker_ptr marker;
+    BPGMetaData *md, **plast_md, *first_md;
+    int has_exif, has_xmp, l, iccp_chunk_count, i;
+    jpeg_saved_marker_ptr iccp_chunks[256];
+    
+    iccp_chunk_count = 0;
+    has_exif = 0;
+    has_xmp = 0;
+    first_md = NULL;
+    plast_md = &first_md;
+    for (marker = first_marker; marker != NULL; marker = marker->next) {
+#if 0
+        printf("marker=APP%d len=%d\n", 
+               marker->marker - JPEG_APP0, marker->data_length);
+#endif
+        if (!has_exif && marker->marker == JPEG_APP0 + 1 &&
+            marker->data_length > sizeof(app1_exif) &&
+            !memcmp(marker->data, app1_exif, sizeof(app1_exif))) {
+            md = bpg_md_alloc(BPG_EXTENSION_TAG_EXIF);
+            l = sizeof(app1_exif);
+            md->buf_len = marker->data_length - l;
+            md->buf = malloc(md->buf_len);
+            memcpy(md->buf, marker->data + l, md->buf_len);
+            *plast_md = md;
+            plast_md = &md->next;
+            has_exif = 1;
+        } else if (!has_xmp && marker->marker == JPEG_APP0 + 1 &&
+                   marker->data_length > sizeof(app1_xmp) &&
+                   !memcmp(marker->data, app1_xmp, sizeof(app1_xmp)) && 
+                   !has_xmp) {
+            md = bpg_md_alloc(BPG_EXTENSION_TAG_XMP);
+            l = sizeof(app1_xmp);
+            md->buf_len = marker->data_length - l;
+            md->buf = malloc(md->buf_len);
+            memcpy(md->buf, marker->data + l, md->buf_len);
+            *plast_md = md;
+            plast_md = &md->next;
+            has_xmp = 1;
+        } else if (marker->marker == JPEG_APP0 + 2 &&
+                   marker->data_length > (sizeof(app2_iccp) + 2) &&
+                   !memcmp(marker->data, app2_iccp, sizeof(app2_iccp))) {
+            int chunk_count, chunk_index;
+            l = sizeof(app2_iccp);
+            chunk_index = marker->data[l];
+            chunk_count = marker->data[l];
+            if (chunk_index == 0 || chunk_count == 0) 
+                continue;
+            if (iccp_chunk_count == 0) {
+                iccp_chunk_count = chunk_count;
+                for(i = 0; i < chunk_count; i++) {
+                    iccp_chunks[i] = NULL;
+                }
+            } else {
+                if (chunk_count != iccp_chunk_count)
+                    continue;
+            }
+            if (chunk_index > iccp_chunk_count)
+                continue;
+            iccp_chunks[chunk_index - 1] = marker;
+        }
+    }
 
-Image *read_jpeg(uint8_t **pexif_buf, int *pexif_buf_len, FILE *f, 
+    if (iccp_chunk_count != 0) {
+        int len, hlen, idx;
+        /* check that no chunk are missing */
+        len = 0;
+        hlen = sizeof(app2_iccp) + 2;
+        for(i = 0; i < iccp_chunk_count; i++) {
+            if (!iccp_chunks[i])
+                break;
+            len += iccp_chunks[i]->data_length - hlen;
+        }
+        if (i == iccp_chunk_count) {
+            md = bpg_md_alloc(BPG_EXTENSION_TAG_ICCP);
+            md->buf_len = len;
+            md->buf = malloc(md->buf_len);
+            idx = 0;
+            for(i = 0; i < iccp_chunk_count; i++) {
+                l = iccp_chunks[i]->data_length - hlen;
+                memcpy(md->buf + idx, iccp_chunks[i]->data + hlen, l);
+                idx += l;
+            }
+            assert(idx == len);
+            *plast_md = md;
+            plast_md = &md->next;
+        }
+    }
+    return first_md;
+}
+
+Image *read_jpeg(BPGMetaData **pmd, FILE *f, 
                  int out_bit_depth)
 {
     struct jpeg_decompress_struct cinfo;
     struct jpeg_error_mgr jerr;
     JSAMPROW rows[4][16];
     JSAMPROW *plane_pointer[4];
-    jpeg_saved_marker_ptr marker;
-    int w, h, w1, i, y_h, c_h, y, v_shift, c_w, y1, exif_buf_len, idx, c_idx;
+    int w, h, w1, i, y_h, c_h, y, v_shift, c_w, y1, idx, c_idx;
     int h1, plane_idx[4], has_alpha;
     Image *img;
-    uint8_t *exif_buf;
     BPGImageFormatEnum format;
     BPGColorSpaceEnum color_space;
     ColorConvertState cvt_s, *cvt = &cvt_s;
-    
-    exif_buf = NULL;
-    exif_buf_len = 0;
+    BPGMetaData *first_md = NULL;
 
     cinfo.err = jpeg_std_error(&jerr);
     jpeg_create_decompress(&cinfo);
 
-    jpeg_save_markers(&cinfo, JPEG_APP0 + 1, EXIF_MAX_LEN);
+    jpeg_save_markers(&cinfo, JPEG_APP0 + 1, 65535);
+    jpeg_save_markers(&cinfo, JPEG_APP0 + 2, 65535);
 
     jpeg_stdio_src(&cinfo, f);
     
@@ -1007,93 +1194,36 @@ Image *read_jpeg(uint8_t **pexif_buf, int *pexif_buf_len, FILE *f,
         }
     }
 
-    /* get the metadata (EXIF) */
-    for (marker = cinfo.marker_list; marker != NULL; marker = marker->next) {
-        if (marker->marker == JPEG_APP0 + 1 &&
-            marker->data_length > 6 &&
-            !memcmp(marker->data, "Exif\0", 6)) {
-            uint8_t *q;
-
-            /* Add EXIF tag */
-            exif_buf = malloc(marker->data_length + 5 * 2);
-            q = exif_buf;
-            put_ue(&q, BPG_EXTENSION_TAG_EXIF);
-            put_ue(&q, marker->data_length);
-            memcpy(q, marker->data, marker->data_length);
-            q += marker->data_length;
-            exif_buf_len = q - exif_buf;
-            break;
-        }
-    }
+    first_md = jpeg_get_metadata(cinfo.marker_list);
 
  the_end:
     jpeg_finish_decompress(&cinfo);
     
     jpeg_destroy_decompress(&cinfo);
-    *pexif_buf = exif_buf;
-    *pexif_buf_len = exif_buf_len;
+    *pmd = first_md;
     return img;
-}
-
-static void save_plane(FILE *f, uint8_t *data, int linesize, int w, int h,
-                       int bpp)
-{
-    uint8_t *buf, *ptr;
-    int y, i;
-
-    if (bpp == 1)
-        buf = malloc(w);
-    else
-        buf = NULL;
-    for(y = 0; y < h; y++) {
-        ptr = data + y * linesize;
-        if (bpp == 1) {
-            for(i = 0; i < w; i++)
-                buf[i] = ((uint16_t *)ptr)[i];
-            ptr = buf;
-        }
-        fwrite(ptr, 1, w * bpp, f);
-    }
-    free(buf);
 }
 
 void save_yuv(Image *img, const char *filename)
 {
-    int bpp, hshift, vshift, c_w, c_h, i;
+    int c_w, c_h, i, c_count, y;
     FILE *f;
+
     f = fopen(filename, "wb");
     if (!f) {
         fprintf(stderr, "Could not open %s\n", filename);
         exit(1);
     }
-    bpp = (img->bit_depth + 7) / 8;
 
-    save_plane(f, img->data[0], img->linesize[0], img->w, img->h, bpp);
-    if (img->format != BPG_FORMAT_GRAY) {
-        switch(img->format) {
-        case BPG_FORMAT_420:
-            hshift = vshift = 1;
-            break;
-        case BPG_FORMAT_422:
-            hshift = 1;
-            vshift = 0;
-            break;
-        default:
-            hshift = vshift = 0;
-            break;
-        }
-        for(i = 1; i < 3; i++) {
-            if (hshift) {
-                c_w = (img->w + 1) / 2;
-            } else {
-                c_w = img->w;
-            }
-            if (vshift) {
-                c_h = (img->h + 1) / 2;
-            } else {
-                c_h = img->h;
-            }
-            save_plane(f, img->data[i], img->linesize[i], c_w, c_h, bpp);
+    if (img->format == BPG_FORMAT_GRAY)
+        c_count = 1;
+    else
+        c_count = 3;
+    for(i = 0; i < c_count; i++) {
+        get_plane_res(img, &c_w, &c_h, i);
+        for(y = 0; y < c_h; y++) {
+            fwrite(img->data[i] + y * img->linesize[i], 
+                   1, c_w << img->pixel_shift, f);
         }
     }
     fclose(f);
@@ -1295,9 +1425,12 @@ static int build_modified_hevc(uint8_t **pout_buf,
     idx = extract_nal(&nal_buf, &nal_len, buf, buf_len);
     if (idx < 0)
         return -1;
-    if (nal_len < 2)
+    if (nal_len < 2) {
+        free(nal_buf);
         return -1;
+    }
     nal_unit_type = (nal_buf[0] >> 1) & 0x3f;
+    free(nal_buf);
     if (nal_unit_type != 32)  {
         fprintf(stderr, "expecting VPS nal (%d)\n", nal_unit_type);
         return -1; /* expect VPS nal */
@@ -1627,7 +1760,7 @@ void help(int is_full)
            "usage: bpgenc [options] infile.[jpg|png]\n"
            "\n"
            "Main options:\n"
-           "-h                   show the full help\n"
+           "-h                   show the full help (including the advanced options)\n"
            "-o outfile           set output filename (default = %s)\n"
            "-q qp                set quantizer parameter (smaller gives better quality,\n" 
            "                     range: 0-51, default = %d)\n"
@@ -1645,7 +1778,7 @@ void help(int is_full)
         printf("\nAdvanced options:\n"
            "-alphaq              set quantizer parameter for the alpha channel (default = same as -q value)\n"
            "-hash                include MD5 hash in HEVC bitstream\n"
-           "-nometadata          do not keep EXIF metadata\n"
+           "-keepmetadata        keep the metadata (from JPEG: EXIF, ICC profile, XMP, from PNG: ICC profile)\n"
            "-v                   show debug messages\n"
                );
     }
@@ -1655,7 +1788,7 @@ void help(int is_full)
 
 struct option long_opts[] = {
     { "hash", no_argument },
-    { "nometadata", no_argument },
+    { "keepmetadata", no_argument },
     { "alphaq", required_argument },
     { "lossless", no_argument },
     { NULL },
@@ -1666,14 +1799,15 @@ int main(int argc, char **argv)
     const char *infilename, *outfilename;
     Image *img, *img_alpha;
     HEVCEncodeParams p_s, *p = &p_s;
-    uint8_t *out_buf, *alpha_buf, *exif_buf;
+    uint8_t *out_buf, *alpha_buf, *extension_buf;
     int out_buf_len, alpha_buf_len, verbose;
     FILE *f;
-    int qp, c, option_index, sei_decoded_picture_hash, is_png, exif_buf_len;
+    int qp, c, option_index, sei_decoded_picture_hash, is_png, extension_buf_len;
     int keep_metadata, cb_size, width, height, compress_level, alpha_qp;
     int bit_depth, lossless_mode;
     BPGImageFormatEnum format;
     BPGColorSpaceEnum color_space;
+    BPGMetaData *md;
 
     outfilename = DEFAULT_OUTFILENAME;
     qp = DEFAULT_QP;
@@ -1681,7 +1815,7 @@ int main(int argc, char **argv)
     sei_decoded_picture_hash = 0;
     format = BPG_FORMAT_420;
     color_space = BPG_CS_YCbCr;
-    keep_metadata = 1;
+    keep_metadata = 0;
     verbose = 0;
     compress_level = 7;
     bit_depth = DEFAULT_BIT_DEPTH;
@@ -1697,7 +1831,7 @@ int main(int argc, char **argv)
                 sei_decoded_picture_hash = 1;
                 break;
             case 1:
-                keep_metadata = 0;
+                keep_metadata = 1;
                 break;
             case 2:
                 alpha_qp = atoi(optarg);
@@ -1797,22 +1931,19 @@ int main(int argc, char **argv)
         fseek(f, 0, SEEK_SET);
     }
     
-    exif_buf = NULL;
-    exif_buf_len = 0;
-
     if (is_png) {
-        img = read_png(f, color_space, bit_depth);
+        img = read_png(&md, f, color_space, bit_depth);
     } else {
-        img = read_jpeg(&exif_buf, &exif_buf_len, f, bit_depth);
+        img = read_jpeg(&md, f, bit_depth);
     }
     if (!img) {
         fprintf(stderr, "Could not read '%s'\n", infilename);
     }
     fclose(f);
 
-    if (!keep_metadata) {
-        free(exif_buf);
-        exif_buf_len = 0;
+    if (!keep_metadata && md) {
+        bpg_md_free(md);
+        md = NULL;
     }
 
     /* extract the alpha plane */
@@ -1832,6 +1963,7 @@ int main(int argc, char **argv)
         img_alpha->has_alpha = 0;
         img_alpha->color_space = BPG_CS_YCbCr;
         img_alpha->bit_depth = bit_depth;
+        img_alpha->pixel_shift = img->pixel_shift;
         img_alpha->data[0] = img->data[c_idx];
         img_alpha->linesize[0] = img->linesize[c_idx];
         
@@ -1861,6 +1993,14 @@ int main(int argc, char **argv)
     image_pad(img, cb_size);
     if (img_alpha)
         image_pad(img_alpha, cb_size);
+
+    /* convert to the allocated pixel width to 8 bit if needed by the
+       HEVC encoder */
+    if (img->bit_depth == 8) {
+        image_convert16to8(img);
+        if (img_alpha)
+            image_convert16to8(img_alpha);
+    }
         
     memset(p, 0, sizeof(*p));
     p->qp = qp;
@@ -1894,18 +2034,43 @@ int main(int argc, char **argv)
         }
     }
 
+    /* prepare the extension data */
+    extension_buf = NULL;
+    extension_buf_len = 0;
+    if (md) {
+        BPGMetaData *md1;
+        int max_len;
+        uint8_t *q;
+
+        max_len = 0;
+        for(md1 = md; md1 != NULL; md1 = md1->next) {
+            max_len += md1->buf_len + 5 * 2;
+        }
+        extension_buf = malloc(max_len);
+        q = extension_buf;
+        for(md1 = md; md1 != NULL; md1 = md1->next) {
+            put_ue(&q, md1->tag);
+            put_ue(&q, md1->buf_len);
+            memcpy(q, md1->buf, md1->buf_len);
+            q += md1->buf_len;
+        }
+        extension_buf_len = q - extension_buf;
+
+        bpg_md_free(md);
+    }
+    
     f = fopen(outfilename, "wb");
     if (!f) {
         perror(outfilename);
         exit(1);
     }
-    
+
     {
         uint8_t img_header[128], *q;
         int v, has_alpha, has_extension;
         
         has_alpha = (img_alpha != NULL);
-        has_extension = (exif_buf_len > 0);
+        has_extension = (extension_buf_len > 0);
         
         q = img_header;
         *q++ = (IMAGE_HEADER_MAGIC >> 24) & 0xff;
@@ -1921,7 +2086,7 @@ int main(int argc, char **argv)
         
         put_ue(&q, out_buf_len);
         if (has_extension) {
-            put_ue(&q, exif_buf_len); /* extension data length */
+            put_ue(&q, extension_buf_len); /* extension data length */
         }
         if (has_alpha) {
             put_ue(&q, alpha_buf_len);
@@ -1930,10 +2095,11 @@ int main(int argc, char **argv)
         fwrite(img_header, 1, q - img_header, f);
 
         if (has_extension) {
-            if (fwrite(exif_buf, 1, exif_buf_len, f) != exif_buf_len) {
-                fprintf(stderr, "Error while writing EXIF data\n");
+            if (fwrite(extension_buf, 1, extension_buf_len, f) != extension_buf_len) {
+                fprintf(stderr, "Error while writing extension data\n");
                 exit(1);
             }
+            free(extension_buf);
         }
 
         /* HEVC YUV/RGB data */
@@ -1941,6 +2107,7 @@ int main(int argc, char **argv)
             fprintf(stderr, "Error while writing HEVC image planes\n");
             exit(1);
         }
+        free(out_buf);
 
         if (has_alpha) {
             /* alpha data */
@@ -1948,10 +2115,15 @@ int main(int argc, char **argv)
                 fprintf(stderr, "Error while writing HEVC alpha plane\n");
                 exit(1);
             }
+            free(alpha_buf);
         }
     }
 
     fclose(f);
+
+    image_free(img);
+    if (img_alpha)
+        image_free(img_alpha);
 
     return 0;
 }

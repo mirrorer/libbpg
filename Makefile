@@ -12,6 +12,8 @@ USE_JCTVC=y
 #USE_JCTVC_HIGH_BIT_DEPTH=y
 # Enable the cross compilation for Windows
 #CONFIG_WIN32=y
+# Enable for compilation on MacOS X
+#CONFIG_APPLE=y
 # Installation prefix
 prefix=/usr/local
 
@@ -43,13 +45,18 @@ CFLAGS+=-DRExt__HIGH_BIT_DEPTH_SUPPORT
 endif
 
 # Emscriptem config
-EMLDFLAGS:=-s "EXPORTED_FUNCTIONS=['_bpg_decoder_open','_bpg_decoder_get_info','_bpg_decoder_start','_bpg_decoder_get_line','_bpg_decoder_close','_malloc','_free']"
+EMLDFLAGS:=-s "EXPORTED_FUNCTIONS=['_bpg_decoder_open','_bpg_decoder_decode','_bpg_decoder_get_info','_bpg_decoder_start','_bpg_decoder_get_line','_bpg_decoder_close','_malloc','_free']"
 EMLDFLAGS+=-s NO_FILESYSTEM=1 -s NO_BROWSER=1 -s TOTAL_MEMORY=33554432
 #EMLDFLAGS+=-O1 --post-js post.js
 EMLDFLAGS+=-O3 --memory-init-file 0 --closure 1 --post-js post.js
 EMCFLAGS:=$(CFLAGS)
 
-LDFLAGS= -g -Wl,--gc-sections
+LDFLAGS=-g
+ifdef CONFIG_APPLE
+LDFLAGS+=-Wl,-dead_strip
+else
+LDFLAGS+=-Wl,--gc-sections
+endif
 CFLAGS+=-g
 CXXFLAGS=$(CFLAGS)
 
@@ -113,8 +120,13 @@ ifdef CONFIG_WIN32
 LIBS:=-lz
 LDFLAGS+=-static
 else
-LIBS:=-lrt -lm -lpthread
-endif
+ifdef CONFIG_APPLE
+LIBS:=
+else
+LIBS:=-lrt
+endif # !CONFIG_APPLE 
+LIBS+=-lm -lpthread
+endif # !CONFIG_WIN32
 
 BPGENC_LIBS+=-lpng -ljpeg $(LIBS)
 

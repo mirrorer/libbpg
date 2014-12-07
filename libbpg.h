@@ -54,7 +54,17 @@ typedef struct {
 
 typedef enum {
     BPG_EXTENSION_TAG_EXIF = 1,
-} BPGImageExtensionTag;
+    BPG_EXTENSION_TAG_ICCP = 2,
+    BPG_EXTENSION_TAG_XMP = 3,
+    BPG_EXTENSION_TAG_THUMBNAIL = 4,
+} BPGExtensionTagEnum;
+
+typedef struct BPGExtensionData {
+    BPGExtensionTagEnum tag;
+    uint32_t buf_len;
+    uint8_t *buf;
+    struct BPGExtensionData *next;
+} BPGExtensionData;
 
 typedef enum {
     BPG_OUTPUT_FORMAT_RGB24,
@@ -65,18 +75,46 @@ typedef enum {
 
 #define BPG_DECODER_INFO_BUF_SIZE 16
 
-/* get information from the start of the image data in 'buf'. Return 0
-   if OK, < 0 if unrecognized data. */
-int bpg_decoder_get_info_from_buf(BPGImageInfo *p,
-                                  const uint8_t *buf, int buf_len);
+BPGDecoderContext *bpg_decoder_open(void);
 
-BPGDecoderContext *bpg_decoder_open(const uint8_t *buf, int buf_len);
-void bpg_decoder_close(BPGDecoderContext *s);
+/* If enable is true, extension data are kept during the image
+   decoding and can be accessed after bpg_decoder_decode() with
+   bpg_decoder_get_extension(). By default, the extension data are
+   discarded. */
+void bpg_decoder_keep_extension_data(BPGDecoderContext *s, int enable);
+
+/* return 0 if 0K, < 0 if error */
+int bpg_decoder_decode(BPGDecoderContext *s, const uint8_t *buf, int buf_len);
+
+/* Return the first element of the extension data list */
+BPGExtensionData *bpg_decoder_get_extension_data(BPGDecoderContext *s);
+
+/* return 0 if 0K, < 0 if error */
 int bpg_decoder_get_info(BPGDecoderContext *s, BPGImageInfo *p);
+
+/* return 0 if 0K, < 0 if error */
 int bpg_decoder_start(BPGDecoderContext *s, BPGDecoderOutputFormat out_fmt);
+
+/* return 0 if 0K, < 0 if error */
 int bpg_decoder_get_line(BPGDecoderContext *s, void *buf);
+
+void bpg_decoder_close(BPGDecoderContext *s);
 
 /* only useful for low level access to the image data */
 uint8_t *bpg_decoder_get_data(BPGDecoderContext *s, int *pline_size, int plane);
+
+/* Get information from the start of the image data in 'buf' (at least
+   min(BPG_DECODER_INFO_BUF_SIZE, file_size) bytes must be given).
+
+   If pfirst_md != NULL, the extension data are also parsed and the
+   first element of the list is returned in *pfirst_md. The list must
+   be freed with bpg_decoder_free_extension_data().
+
+   Return 0 if OK, < 0 if unrecognized data. */
+int bpg_decoder_get_info_from_buf(BPGImageInfo *p, 
+                                  BPGExtensionData **pfirst_md,
+                                  const uint8_t *buf, int buf_len);
+/* Free the extension data returned by bpg_decoder_get_info_from_buf() */
+void bpg_decoder_free_extension_data(BPGExtensionData *first_md);
 
 #endif /* _LIBBPG_H */

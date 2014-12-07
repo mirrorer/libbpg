@@ -167,14 +167,13 @@ static void png_save(BPGDecoderContext *img, const char *filename, int bit_depth
 }
 #endif /* USE_PNG */
 
-
-
-static void bpg_show_info(const char *filename)
+static void bpg_show_info(const char *filename, int show_extensions)
 {
-    uint8_t buf[BPG_DECODER_INFO_BUF_SIZE];
-    int buf_len, ret;
+    uint8_t *buf;
+    int buf_len, ret, buf_len_max;
     FILE *f;
     BPGImageInfo p_s, *p = &p_s;
+    BPGExtensionData *first_md, *md;
     static const char *format_str[4] = {
         "Gray",
         "4:2:0",
@@ -188,15 +187,34 @@ static void bpg_show_info(const char *filename)
         "YCbCrK",
         "CMYK",
     };
-    
+    static const char *extension_tag_str[] = {
+        "Unknown",
+        "EXIF",
+        "ICC profile",
+        "XMP",
+        "Thumbnail",
+    };
+        
     f = fopen(filename, "rb");
     if (!f) {
         fprintf(stderr, "Could not open %s\n", filename);
         exit(1);
     }
 
-    buf_len = fread(buf, 1, sizeof(buf), f);
-    ret = bpg_decoder_get_info_from_buf(p, buf, buf_len);
+    if (show_extensions) {
+        fseek(f, 0, SEEK_END);
+        buf_len_max = ftell(f);
+        fseek(f, 0, SEEK_SET);
+    } else {
+        /* if no extension are shown, just need the header */
+        buf_len_max = BPG_DECODER_INFO_BUF_SIZE;
+    }
+    buf = malloc(buf_len_max);
+    buf_len = fread(buf, 1, buf_len_max, f);
+
+    ret = bpg_decoder_get_info_from_buf(p, show_extensions ? &first_md : NULL,
+                                        buf, buf_len);
+    free(buf);
     fclose(f);
     if (ret < 0) {
         fprintf(stderr, "Not a BPG image\n");
@@ -208,6 +226,19 @@ static void bpg_show_info(const char *filename)
            p->has_alpha,
            format_str[p->format],
            p->bit_depth);
+    if (first_md) {
+        const char *tag_name;
+        printf("Extension data:\n");
+        for(md = first_md; md != NULL; md = md->next) {
+            if (md->tag <= 4)
+                tag_name = extension_tag_str[md->tag];
+            else
+                tag_name = extension_tag_str[0];
+            printf("  tag=%d (%s) length=%d\n",
+                   md->tag, tag_name, md->buf_len);
+        }
+        bpg_decoder_free_extension_data(first_md);
+    }
 }
 
 static void help(void)
@@ -217,7 +248,7 @@ static void help(void)
            "Options:\n"
            "-o outfile.[ppm|png]   set the output filename (default = out.png)\n"
            "-b bit_depth           PNG output only: use bit_depth per component (8 or 16, default = 8)\n"
-           "-i                     display information about the picture\n");
+           "-i                     display information about the image\n");
     exit(1);
 }
 
@@ -261,7 +292,7 @@ int main(int argc, char **argv)
     filename = argv[optind++];
 
     if (show_info) {
-        bpg_show_info(filename);
+        bpg_show_info(filename, 1);
         return 0;
     }
 
@@ -283,14 +314,14 @@ int main(int argc, char **argv)
     
     fclose(f);
 
-    img = bpg_decoder_open(buf, buf_len);
-    free(buf);
-    
-    if (!img) {
+    img = bpg_decoder_open();
+
+    if (bpg_decoder_decode(img, buf, buf_len) < 0) {
         fprintf(stderr, "Could not decode image\n");
         exit(1);
     }
-    
+    free(buf);
+
 #ifdef USE_PNG
     p = strrchr(outfilename, '.');
     if (p)

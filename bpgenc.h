@@ -33,6 +33,7 @@ typedef struct {
     uint8_t has_alpha;
     BPGColorSpaceEnum color_space;
     uint8_t bit_depth;
+    uint8_t pixel_shift; /* (1 << pixel_shift) bytes per pixel */
     uint8_t *data[4];
     int linesize[4];
 } Image;

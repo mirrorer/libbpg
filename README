@@ -51,7 +51,7 @@ BPG Image Encoder and Decoder
   mode is less tested that the lossy mode but it usually gives better
   results that PNG on photographic images.
 
-- There is a difference of interpreation of the quantizer parameter
+- There is a difference of interpretation of the quantizer parameter
   (-q option) between the x265 and JCTVC encoder. The default value is
   optimized for the JCTVC encoder, not for x265. We will try to align
   the x265 value to JCTVC in the future.
@@ -60,6 +60,25 @@ BPG Image Encoder and Decoder
   bits. You can enable high bit depths (up to 14) by enabling the
   Makefile define: USE_JCTVC_HIGH_BIT_DEPTH. The encoder is sligthly
   slower in this case.
+
+- Color space and chroma format:
+
+    * For JPEG input, the color space of the input image is not
+      modified (it is YCbCr, RGB, YCbCrK or CMYK). The chroma is
+      subsampled according to the preferred chroma format ('-f'
+      option). Images with vertically subsampled chroma are currently
+      not supported.
+
+    * For PNG input, grayscale images are not modified. For RGB
+      images, the input image is converted to the preferred color
+      space ('-c' option). Its chroma is then subsampled according to
+      the preferred chroma format.
+
+    * grayscale images are kept unmodified.
+
+- By default, bpgenc does not copy the metadata. You can copy them
+  with the '-keepmetadata' option. For JPEG input, EXIF, ICCP and XMP
+  are copied. For PNG input, ICCP is copied.
 
 3) FFmpeg modifications
 -----------------------

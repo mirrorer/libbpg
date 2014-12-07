@@ -114,39 +114,9 @@ int x265_encode_picture(uint8_t **pbuf, Image *img,
         c_count = 1;
     else
         c_count = 3;
-    if (img->bit_depth == 8) {
-        /* must convert to 8 bits per sample */
-        for(i = 0; i < c_count; i++) {
-            uint8_t *plane;
-            int w, h, stride, y, x;
-            w = img->w;
-            h = img->h;
-            if (i == 1 || i == 2) {
-                if (img->format == BPG_FORMAT_420) {
-                    w >>= 1;
-                    h >>= 1;
-                } else if (img->format == BPG_FORMAT_422) {
-                    w >>= 1;
-                }
-            }
-            stride = w;
-            plane = malloc(stride * h);
-            for(y = 0; y < h; y++) {
-                const uint16_t *src;
-                uint8_t *dst;
-                dst = plane + stride * y;
-                src = (uint16_t *)(img->data[i] + img->linesize[i] * y);
-                for(x = 0; x < w; x++)
-                    dst[x] = src[x];
-            }
-            pic->planes[i] = plane;
-            pic->stride[i] = stride;
-        }
-    } else {
-        for(i = 0; i < c_count; i++) {
-            pic->planes[i] = img->data[i];
-            pic->stride[i] = img->linesize[i];
-        }
+    for(i = 0; i < c_count; i++) {
+        pic->planes[i] = img->data[i];
+        pic->stride[i] = img->linesize[i];
     }
     pic->bitDepth = img->bit_depth;
     pic->colorSpace = p->internalCsp;
@@ -182,12 +152,6 @@ int x265_encode_picture(uint8_t **pbuf, Image *img,
 
     x265_param_free(p);
     
-    if (img->bit_depth == 8) {
-        for(i = 0; i < c_count; i++) {
-            free(pic->planes[i]);
-        }
-    }
-
     x265_picture_free(pic);
 
     *pbuf = buf;
