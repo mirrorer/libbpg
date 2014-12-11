@@ -654,10 +654,8 @@ typedef struct Mv {
 } Mv;
 
 typedef struct MvField {
-#ifdef USE_PRED
     DECLARE_ALIGNED(4, Mv, mv)[2];
     int8_t ref_idx[2];
-#endif
     int8_t pred_flag;
 } MvField;
 
@@ -709,18 +707,22 @@ typedef struct DBParams {
 typedef struct HEVCFrame {
     AVFrame *frame;
     ThreadFrame tf;
+#ifdef USE_PRED
     MvField *tab_mvf;
     RefPicList *refPicList;
     RefPicListTab **rpl_tab;
+#endif
     int ctb_count;
     int poc;
     struct HEVCFrame *collocated_ref;
 
     HEVCWindow window;
 
+#ifdef USE_PRED
     AVBufferRef *tab_mvf_buf;
     AVBufferRef *rpl_tab_buf;
     AVBufferRef *rpl_buf;
+#endif
 
     /**
      * A sequence counter, so that old frames are output first
@@ -805,10 +807,15 @@ typedef struct HEVCContext {
     uint8_t slice_initialized;
 
     AVFrame *frame;
-    AVFrame *sao_frame;
-    AVFrame *tmp_frame;
     AVFrame *output_frame;
-
+#ifdef USE_SAO_SMALL_BUFFER
+    uint8_t *sao_pixel_buffer;
+    uint8_t *sao_pixel_buffer_h[3];
+    uint8_t *sao_pixel_buffer_v[3];
+#else
+    AVFrame *tmp_frame;
+    AVFrame *sao_frame;
+#endif
     const HEVCVPS *vps;
     const HEVCSPS *sps;
     const HEVCPPS *pps;
@@ -818,11 +825,13 @@ typedef struct HEVCContext {
 
     AVBufferRef *current_sps;
 
+#ifdef USE_PRED
     AVBufferPool *tab_mvf_pool;
     AVBufferPool *rpl_tab_pool;
 
     ///< candidate references for the current frame
     RefPicList rps[5];
+#endif
 
     SliceHeader sh;
     SAOParams *sao;

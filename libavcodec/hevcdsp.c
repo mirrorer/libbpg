@@ -147,27 +147,23 @@ DECLARE_ALIGNED(16, const int8_t, ff_hevc_qpel_filters[3][16]) = {
 
 #else
 
-#if defined(USE_FULL) || !defined(USE_10BIT)
 #define BIT_DEPTH 8
 #include "hevcdsp_template.c"
 #undef BIT_DEPTH
-#endif
-
-#if defined(USE_FULL) || defined(USE_10BIT)
-#define BIT_DEPTH 10
-#include "hevcdsp_template.c"
-#undef BIT_DEPTH
-#endif
 
 #ifdef USE_FULL
 #define BIT_DEPTH 9
 #include "hevcdsp_template.c"
 #undef BIT_DEPTH
 
+#define BIT_DEPTH 10
+#include "hevcdsp_template.c"
+#undef BIT_DEPTH
+
 #define BIT_DEPTH 12
 #include "hevcdsp_template.c"
 #undef BIT_DEPTH
-#endif
+#endif /* USE_FULL */
 
 #endif /* !USE_VAR_BIT_DEPTH */
 
@@ -314,13 +310,13 @@ void ff_hevc_dsp_init(HEVCDSPContext *hevcdsp, int bit_depth)
     hevcdsp->hevc_v_loop_filter_chroma_c = FUNC(hevc_v_loop_filter_chroma, depth)
 #endif
 
-
+#ifdef USE_PRED
+int i = 0;
+#endif
 
 #if defined(USE_VAR_BIT_DEPTH)
     HEVC_DSP(var);
 #else
-int i = 0;
-
     switch (bit_depth) {
 #ifdef USE_FULL
     case 9:
@@ -332,20 +328,10 @@ int i = 0;
     case 12:
         HEVC_DSP(12);
         break;
+#endif /* USE_FULL */
     default:
         HEVC_DSP(8);
         break;
-#else
-#ifdef USE_10BIT
-    case 10:
-        HEVC_DSP(10);
-        break;
-#else
-    case 8:
-        HEVC_DSP(8);
-        break;
-#endif
-#endif
     }
 #endif /* USE_VAR_BIT_DEPTH */
 

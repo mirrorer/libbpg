@@ -38,7 +38,7 @@ typedef struct {
 
 
 static const AVPixFmtDescriptorEntry pix_desc[] = {
-#ifdef USE_10BIT
+#ifdef USE_VAR_BIT_DEPTH
     {
         AV_PIX_FMT_YUV420P16LE,
         {
@@ -100,17 +100,58 @@ static const AVPixFmtDescriptorEntry pix_desc[] = {
     {
         AV_PIX_FMT_YUV420P,
         {
-            //    .name = "yuv420p",
+            //.name = "yuv420p",
             .nb_components = 3,
             .log2_chroma_w = 1,
             .log2_chroma_h = 1,
             .comp = {
-                { 0, 0, 1, 0, 7 },        /* Y */
-                { 1, 0, 1, 0, 7 },        /* U */
-                { 2, 0, 1, 0, 7 },        /* V */
+                { 0, 1, 1, 0, 7 },        /* Y */
+                { 1, 1, 1, 0, 7 },        /* U */
+                { 2, 1, 1, 0, 7 },        /* V */
+            },
+        }
+    },
+    {
+        AV_PIX_FMT_YUV422P16LE,
+        {
+            //.name = "yuv422p",
+            .nb_components = 3,
+            .log2_chroma_w = 1,
+            .log2_chroma_h = 0,
+            .comp = {
+                { 0, 1, 1, 0, 7 },        /* Y */
+                { 1, 1, 1, 0, 7 },        /* U */
+                { 2, 1, 1, 0, 7 },        /* V */
             },
             .flags = AV_PIX_FMT_FLAG_PLANAR,
         }
+    },
+    {
+        AV_PIX_FMT_YUV444P,
+        {
+            //.name = "yuv444p",
+            .nb_components = 3,
+            .log2_chroma_w = 0,
+            .log2_chroma_h = 0,
+            .comp = {
+                { 0, 1, 1, 0, 7 },        /* Y */
+                { 1, 1, 1, 0, 7 },        /* U */
+                { 2, 1, 1, 0, 7 },        /* V */
+            },
+            .flags = AV_PIX_FMT_FLAG_PLANAR,
+        }
+    },
+    {
+        AV_PIX_FMT_GRAY8,
+        {
+            //.name = "gray",
+            .nb_components = 1,
+            .log2_chroma_w = 0,
+            .log2_chroma_h = 0,
+            .comp = {
+                { 0, 1, 1, 0, 7 },       /* Y */
+            },
+        },
     },
 #endif
 };

@@ -47,7 +47,11 @@
 #define ITAPS2 4 
 #define ITAPS (2 * ITAPS2) /* number of taps of the interpolation filter */
 
+#ifdef USE_VAR_BIT_DEPTH
 typedef uint16_t PIXEL;
+#else
+typedef uint8_t PIXEL;
+#endif
 
 typedef struct {
     int c_shift;
@@ -1104,7 +1108,7 @@ BPGDecoderContext *bpg_decoder_open(void)
 }
 
 typedef struct {
-    int width, height;
+    uint32_t width, height;
     BPGImageFormatEnum format;
     uint8_t has_alpha;
     uint8_t bit_depth;

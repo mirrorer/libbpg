@@ -1,6 +1,6 @@
 BPG Specification
 
-version 0.9.1
+version 0.9.2
 
 Copyright (c) 2014 Fabrice Bellard
 
@@ -13,12 +13,13 @@ with an optional alpha channel. The CMYK color space is also supported
 with an RGB or YCbCr color space. The bit depth of each component is
 from 8 to 14 bits.
 
-In the YCbCr case, the chroma can be subsampled by a factor of two in
-horizontal or both in horizontal or vertical directions (4:4:4, 4:2:2
-or 4:2:0 formats). The chroma is sampled at the same position relative
-to the luma as in the JPEG format [2] and uses the full range of
-values. Arbitrary metadata (such as EXIF, ICC profile, XMP) are
-supported.
+The chroma can be subsampled by a factor of two in horizontal or both
+in horizontal and vertical directions (4:4:4, 4:2:2 or 4:2:0 chroma
+formats are supported). The chroma is sampled at the same position
+relative to the luma as in the JPEG format [2] and uses the full range
+of values. 
+
+Arbitrary metadata (such as EXIF, ICC profile, XMP) are supported.
 
 2) Bitstream conventions
 ------------------------
@@ -155,6 +156,9 @@ hevc_data()
        3 : 4:4:4
 
        The other values are reserved.
+       
+       The chroma samples in the 4:2:0 and 4:2:2 formats are sampled
+       at the same position as JPEG [2].
 
      'alpha_present_flag' indicates that the picture contains an alpha
      plane in addition to the color data. When an alpha plane is
@@ -162,7 +166,7 @@ hevc_data()
      
      'bit_depth_minus_8' is the number of bits used for each component
      minus 8. In this version of the specification, bit_depth_minus_8
-     shall be 2.
+     <= 6.
 
      'extension_present_flag' indicates that extension data are
      present. These data are ignored by the current decoders.
@@ -225,7 +229,7 @@ hevc_data()
        3: XMP (see [5])
 
        4: Thumbnail (the thumbnail shall be a lower resolution version
-       of the image stored in BPG format).
+       of the image and stored in BPG format).
 
      The decoder shall ignore the tags it does not support.
 
@@ -374,11 +378,10 @@ information.
 
 [1] High efficiency video coding (HEVC) version 2 (ITU-T Recommendation H.265)
 
-[2] JPEG Standard (JPEG ISO/IEC 10918-1 ITU-T Recommendation T.81)
+[2] JPEG File Interchange Format version 1.02 ( http://www.w3.org/Graphics/JPEG/jfif3.pdf )
 
 [3] EXIF version 2.2 (JEITA CP-3451)
 
 [4] The International Color Consortium ( http://www.color.org/ )
 
-[5]  Extensible Metadata Platform (XMP) http://www.adobe.com/devnet/xmp.html
-
+[5] Extensible Metadata Platform (XMP) http://www.adobe.com/devnet/xmp.html

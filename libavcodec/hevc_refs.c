@@ -37,18 +37,20 @@ void ff_hevc_unref_frame(HEVCContext *s, HEVCFrame *frame, int flags)
     if (!frame->flags) {
         ff_thread_release_buffer(s->avctx, &frame->tf);
 
+#ifdef USE_PRED
         av_buffer_unref(&frame->tab_mvf_buf);
         frame->tab_mvf = NULL;
-
         av_buffer_unref(&frame->rpl_buf);
         av_buffer_unref(&frame->rpl_tab_buf);
         frame->rpl_tab    = NULL;
         frame->refPicList = NULL;
+#endif
 
         frame->collocated_ref = NULL;
     }
 }
 
+#ifdef USE_PRED
 RefPicList *ff_hevc_get_ref_list(HEVCContext *s, HEVCFrame *ref, int x0, int y0)
 {
     int x_cb         = x0 >> s->sps->log2_ctb_size;
@@ -57,6 +59,7 @@ RefPicList *ff_hevc_get_ref_list(HEVCContext *s, HEVCFrame *ref, int x0, int y0)
     int ctb_addr_ts  = s->pps->ctb_addr_rs_to_ts[y_cb * pic_width_cb + x_cb];
     return (RefPicList *)ref->rpl_tab[ctb_addr_ts];
 }
+#endif
 
 void ff_hevc_clear_refs(HEVCContext *s)
 {
@@ -87,6 +90,8 @@ static HEVCFrame *alloc_frame(HEVCContext *s)
         if (ret < 0)
             return NULL;
 
+        frame->ctb_count = s->sps->ctb_width * s->sps->ctb_height;
+#ifdef USE_PRED
         frame->rpl_buf = av_buffer_allocz(s->nb_nals * sizeof(RefPicListTab));
         if (!frame->rpl_buf)
             goto fail;
@@ -100,9 +105,9 @@ static HEVCFrame *alloc_frame(HEVCContext *s)
         if (!frame->rpl_tab_buf)
             goto fail;
         frame->rpl_tab   = (RefPicListTab **)frame->rpl_tab_buf->data;
-        frame->ctb_count = s->sps->ctb_width * s->sps->ctb_height;
         for (j = 0; j < frame->ctb_count; j++)
             frame->rpl_tab[j] = (RefPicListTab *)frame->rpl_buf->data;
+#endif
 
         frame->frame->top_field_first  = s->picture_struct == AV_PICTURE_STRUCTURE_TOP_FIELD;
         frame->frame->interlaced_frame = (s->picture_struct == AV_PICTURE_STRUCTURE_TOP_FIELD) || (s->picture_struct == AV_PICTURE_STRUCTURE_BOTTOM_FIELD);

@@ -32,12 +32,16 @@ static HEVC_INLINE void FUNC(intra_pred)(HEVCContext *s, int x0, int y0,
 {
 #define PU(x) \
     ((x) >> s->sps->log2_min_pu_size)
+#ifdef USE_PRED
 #define MVF(x, y) \
-    (s->ref->tab_mvf[(x) + (y) * min_pu_width])
+    (s->ref->tab_mvf[(x) + (y) * min_pu_width].pred_flag)
+#else
+#define MVF(x, y) PF_INTRA
+#endif
 #define MVF_PU(x, y) \
     MVF(PU(x0 + ((x) << hshift)), PU(y0 + ((y) << vshift)))
 #define IS_INTRA(x, y) \
-    (MVF_PU(x, y).pred_flag == PF_INTRA)
+    (MVF_PU(x, y) == PF_INTRA)
 #define MIN_TB_ADDR_ZS(x, y) \
     s->pps->min_tb_addr_zs[(y) * (s->sps->tb_mask+2) + (x)]
 #define EXTEND(ptr, val, len)         \
@@ -131,7 +135,7 @@ do {                                  \
             int max = FFMIN(size_in_luma_pu_v, s->sps->min_pu_height - y_bottom_pu);
             cand_bottom_left = 0;
             for (i = 0; i < max; i += 2)
-                cand_bottom_left |= (MVF(x_left_pu, y_bottom_pu + i).pred_flag == PF_INTRA);
+                cand_bottom_left |= (MVF(x_left_pu, y_bottom_pu + i) == PF_INTRA);
         }
         if (cand_left == 1 && on_pu_edge_x) {
             int x_left_pu   = PU(x0 - 1);
@@ -139,12 +143,12 @@ do {                                  \
             int max = FFMIN(size_in_luma_pu_v, s->sps->min_pu_height - y_left_pu);
             cand_left = 0;
             for (i = 0; i < max; i += 2)
-                cand_left |= (MVF(x_left_pu, y_left_pu + i).pred_flag == PF_INTRA);
+                cand_left |= (MVF(x_left_pu, y_left_pu + i) == PF_INTRA);
         }
         if (cand_up_left == 1) {
             int x_left_pu   = PU(x0 - 1);
             int y_top_pu    = PU(y0 - 1);
-            cand_up_left = MVF(x_left_pu, y_top_pu).pred_flag == PF_INTRA;
+            cand_up_left = MVF(x_left_pu, y_top_pu) == PF_INTRA;
         }
         if (cand_up == 1 && on_pu_edge_y) {
             int x_top_pu    = PU(x0);
@@ -152,7 +156,7 @@ do {                                  \
             int max = FFMIN(size_in_luma_pu_h, s->sps->min_pu_width - x_top_pu);
             cand_up = 0;
             for (i = 0; i < max; i += 2)
-                cand_up |= (MVF(x_top_pu + i, y_top_pu).pred_flag == PF_INTRA);
+                cand_up |= (MVF(x_top_pu + i, y_top_pu) == PF_INTRA);
         }
         if (cand_up_right == 1 && on_pu_edge_y) {
             int y_top_pu    = PU(y0 - 1);
@@ -160,7 +164,7 @@ do {                                  \
             int max = FFMIN(size_in_luma_pu_h, s->sps->min_pu_width - x_right_pu);
             cand_up_right = 0;
             for (i = 0; i < max; i += 2)
-                cand_up_right |= (MVF(x_right_pu + i, y_top_pu).pred_flag == PF_INTRA);
+                cand_up_right |= (MVF(x_right_pu + i, y_top_pu) == PF_INTRA);
         }
         memset(left, 128, 2 * MAX_TB_SIZE*sizeof(pixel));
         memset(top , 128, 2 * MAX_TB_SIZE*sizeof(pixel));

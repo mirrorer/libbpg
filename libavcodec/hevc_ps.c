@@ -783,6 +783,7 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
         goto err;
     sps->bit_depth = get_bits(gb, 8) + 8;
 
+#ifdef USE_VAR_BIT_DEPTH
     /* Note: in order to simplify the code we always use 16 bit pixfmt */
     switch(sps->chroma_format_idc) {
     case 0:
@@ -800,6 +801,30 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
         break;
     }
     sps->pixel_shift = 1;
+#else
+    if (sps->bit_depth != 8) {
+        ret = AVERROR_INVALIDDATA;
+        goto err;
+    }
+
+    switch(sps->chroma_format_idc) {
+    case 0:
+        sps->pix_fmt = AV_PIX_FMT_GRAY8;
+        break;
+    case 1:
+        sps->pix_fmt = AV_PIX_FMT_YUV420P;
+        break;
+    case 2:
+        sps->pix_fmt = AV_PIX_FMT_YUV422P;
+        break;
+    default:
+    case 3:
+        sps->pix_fmt = AV_PIX_FMT_YUV444P;
+        break;
+    }
+    sps->pixel_shift = 0;
+#endif /* !USE_VAR_BIT_DEPTH */
+
 #else
     sps->vps_id = get_bits(gb, 4);
     if (sps->vps_id >= MAX_VPS_COUNT) {

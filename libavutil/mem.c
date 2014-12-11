@@ -43,6 +43,13 @@
 #include "intreadwrite.h"
 #include "mem.h"
 
+//#define USE_MEM_STATS
+
+#ifdef USE_MEM_STATS
+#include <malloc.h>
+static int mem_cur, mem_max;
+#endif
+
 #ifdef MALLOC_PREFIX
 
 #define malloc         AV_JOIN(MALLOC_PREFIX, malloc)
@@ -128,6 +135,16 @@ void *av_malloc(size_t size)
      */
 #else
     ptr = malloc(size);
+#ifdef USE_MEM_STATS
+    printf("malloc(%ld) -> %p\n", size, ptr);
+    if (ptr) {
+        mem_cur += malloc_usable_size(ptr);
+        if (mem_cur > mem_max) {
+            mem_max = mem_cur;
+            printf("mem_max=%d\n", mem_max);
+        }
+    }
+#endif
 #endif
     if(!ptr && !size) {
         size = 1;
@@ -163,7 +180,22 @@ void *av_realloc(void *ptr, size_t size)
 #elif HAVE_ALIGNED_MALLOC
     return _aligned_realloc(ptr, size + !size, ALIGN);
 #else
+#ifdef USE_MEM_STATS
+    if (ptr) 
+        mem_cur -= malloc_usable_size(ptr);
+    printf("realloc(%p, %ld)\n", ptr, size);
+    ptr = realloc(ptr, size + !size);
+    if (ptr) {
+        mem_cur += malloc_usable_size(ptr);
+        if (mem_cur > mem_max) {
+            mem_max = mem_cur;
+            printf("mem_max=%d\n", mem_max);
+        }
+    }
+    return ptr;
+#else
     return realloc(ptr, size + !size);
+#endif
 #endif
 }
 
@@ -229,6 +261,12 @@ void av_free(void *ptr)
 #elif HAVE_ALIGNED_MALLOC
     _aligned_free(ptr);
 #else
+#ifdef USE_MEM_STATS
+    if (ptr) {
+        printf("free(%p)\n", ptr);
+        mem_cur -= malloc_usable_size(ptr);
+    }
+#endif
     free(ptr);
 #endif
 }

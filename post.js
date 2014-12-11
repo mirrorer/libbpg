@@ -95,8 +95,9 @@ _onload: function(request, event)
     w4 = w * 4;
     for(y = 0; y < h; y++) {
         this.bpg_decoder_get_line(img, rgba_line);
-        for(i = 0; i < w4; i++) {
-            dst[p0++] = heap8[rgba_line + i];
+        for(i = 0; i < w4; i = (i + 1) | 0) {
+            dst[p0] = heap8[(rgba_line + i) | 0] | 0;
+            p0 = (p0 + 1) | 0;
         }
     }
 
@@ -113,7 +114,7 @@ _onload: function(request, event)
 };
 
 window.onload = function() { 
-    var i, n, el, tab, tab1, url, dec, canvas, id, style, ctx;
+    var i, n, el, tab, tab1, url, dec, canvas, id, style, ctx, dw, dh;
 
     /* put all images to load in a separate array */
     tab = document.images;
@@ -133,8 +134,22 @@ window.onload = function() {
         el = tab1[i];
         url = el.src;
         canvas = document.createElement("canvas");
-        canvas.id = el.id;
-        canvas.className = el.className;
+
+        if (el.id)
+            canvas.id = el.id;
+        if (el.className)
+            canvas.className = el.className;
+
+        /* handle simple attribute cases to resize the canvas */
+        dw = el.getAttribute("width") | 0;
+        if (dw) {
+            canvas.style.width = dw + "px";
+        }
+        dh = el.getAttribute("height") | 0;
+        if (dh) {
+            canvas.style.height = dh + "px";
+        }
+
         el.parentNode.replaceChild(canvas, el);
 
         ctx = canvas.getContext("2d");
@@ -142,10 +157,8 @@ window.onload = function() {
         dec.onload = (function(canvas, ctx) {
             var imageData = this['imageData'];
             /* resize the canvas to the image size */
-            if (canvas.style.width === "") 
-                canvas.width = imageData.width;
-            if (canvas.style.height === "") 
-                canvas.height = imageData.height;
+            canvas.width = imageData.width;
+            canvas.height = imageData.height;
 
             /* draw the image */
             ctx.putImageData(imageData, 0, 0);

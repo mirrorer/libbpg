@@ -39,27 +39,23 @@
 
 #else
 
-#if defined(USE_FULL) || !defined(USE_10BIT)
 #define BIT_DEPTH 8
 #include "hevcpred_template.c"
 #undef BIT_DEPTH
-#endif
-
-#if defined(USE_FULL) || defined(USE_10BIT)
-#define BIT_DEPTH 10
-#include "hevcpred_template.c"
-#undef BIT_DEPTH
-#endif
 
 #ifdef USE_FULL
 #define BIT_DEPTH 9
 #include "hevcpred_template.c"
 #undef BIT_DEPTH
 
+#define BIT_DEPTH 10
+#include "hevcpred_template.c"
+#undef BIT_DEPTH
+
 #define BIT_DEPTH 12
 #include "hevcpred_template.c"
 #undef BIT_DEPTH
-#endif
+#endif /* USE_FULL */
 
 #endif /* USE_VAR_BIT_DEPTH */
 
@@ -91,20 +87,16 @@ void ff_hevc_pred_init(HEVCPredContext *hpc, int bit_depth)
     case 9:
         HEVC_PRED(9);
         break;
-    case 12:
-        HEVC_PRED(12);
-        break;
-#endif
-#if defined(USE_FULL) || defined(USE_10BIT)
     case 10:
         HEVC_PRED(10);
         break;
-#endif
-#if defined(USE_FULL) || !defined(USE_10BIT)
-    case 8:
+    case 12:
+        HEVC_PRED(12);
+        break;
+#endif /* USE_FULL */
+    default:
         HEVC_PRED(8);
         break;
-#endif
     }
 #endif /* !USE_VAR_BIT_DEPTH */
 }

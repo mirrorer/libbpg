@@ -1819,9 +1819,12 @@
 #define CONFIG_LIBSSH_PROTOCOL 0
 #define CONFIG_LIBSMBCLIENT_PROTOCOL 0
 
-//#define USE_MD5
-#define USE_10BIT
+/* HEVC decoder options */
+//#define USE_MD5 /* include MD5 SEI check */
 #define USE_MSPS /* support modified SPS header to simplify decoder */
-#define USE_VAR_BIT_DEPTH
+//#define USE_VAR_BIT_DEPTH /* support all bit depths with reduced code size */
+#define USE_SAO_SMALL_BUFFER /* reduce the memory used by SAO */
+//#define USE_PRED           /* allow non intra frames */
+//#define USE_FULL           /* include HEVC code not relevant for BPG decoding */
 
 #endif /* FFMPEG_CONFIG_H */

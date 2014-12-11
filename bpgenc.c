@@ -772,7 +772,7 @@ Image *read_png(BPGMetaData **pmd,
     int bit_depth, color_type;
     Image *img;
     uint8_t **rows;
-    int y, has_alpha;
+    int y, has_alpha, linesize, bpp;
     BPGImageFormatEnum format;
     ColorConvertState cvt_s, *cvt = &cvt_s;
     BPGMetaData *md, **plast_md, *first_md;
@@ -842,8 +842,13 @@ Image *read_png(BPGMetaData **pmd,
                       out_bit_depth);
 
     rows = malloc(sizeof(rows[0]) * img->h);
+    if (format == BPG_FORMAT_GRAY)
+        bpp = (1 + has_alpha) * (bit_depth / 8);
+    else
+        bpp = (3 + has_alpha) * (bit_depth / 8);
+    linesize = bpp * img->w;
     for (y = 0; y < img->h; y++) {
-        rows[y] = malloc(png_get_rowbytes(png_ptr, info_ptr));
+        rows[y] = malloc(linesize);
     }
     
     png_read_image(png_ptr, rows);
@@ -1707,26 +1712,48 @@ static int build_modified_hevc(uint8_t **pout_buf,
     return out_buf_len;
 }
 
+typedef enum {
+#if defined(USE_JCTVC)
+    HEVC_ENCODER_JCTVC,
+#endif
+#if defined(USE_X265)
+    HEVC_ENCODER_X265,
+#endif
+
+    HEVC_ENCODER_COUNT,
+} HEVCEncoderEnum;
+
+static char *hevc_encoder_name[HEVC_ENCODER_COUNT] = {
+#if defined(USE_JCTVC)
+    "jctvc",
+#endif
+#if defined(USE_X265)
+    "x265",
+#endif
+};
+
 static int hevc_encode_picture2(uint8_t **pbuf, Image *img, 
-                                HEVCEncodeParams *params)
+                                HEVCEncodeParams *params,
+                                HEVCEncoderEnum encoder_type)
 {
     uint8_t *buf, *out_buf;
     int buf_len, out_buf_len;
     
-#if defined(USE_JCTVC) && !defined(USE_X265)
-    buf_len = jctvc_encode_picture(&buf, img, params);
-#elif !defined(USE_JCTVC) && defined(USE_X265)
-    buf_len = x265_encode_picture(&buf, img, params);
-#else
-    if (params->compress_level == 9 ||
-        img->format == BPG_FORMAT_GRAY ||
-        params->lossless) {
-        /* x265 does not support gray or lossless yet */
+    switch(encoder_type) {
+#if defined(USE_JCTVC)
+    case HEVC_ENCODER_JCTVC:
         buf_len = jctvc_encode_picture(&buf, img, params);
-    } else {
-        buf_len = x265_encode_picture(&buf, img, params);
-    }
+        break;
 #endif
+#if defined(USE_X265)
+    case HEVC_ENCODER_X265:
+        buf_len = x265_encode_picture(&buf, img, params);
+        break;
+#endif
+    default:
+        buf_len = -1;
+        break;
+    }
     if (buf_len < 0) {
         *pbuf = NULL;
         return -1;
@@ -1746,16 +1773,27 @@ static int hevc_encode_picture2(uint8_t **pbuf, Image *img,
 
 #define DEFAULT_OUTFILENAME "out.bpg"
 #define DEFAULT_QP 28
-#define DEFAULT_BIT_DEPTH 10
+#define DEFAULT_BIT_DEPTH 8
 
 #ifdef RExt__HIGH_BIT_DEPTH_SUPPORT
 #define BIT_DEPTH_MAX 14
 #else
 #define BIT_DEPTH_MAX 12
 #endif
+#define DEFAULT_COMPRESS_LEVEL 8
 
 void help(int is_full)
 {
+    char hevc_encoders[128];
+    int i;
+
+    hevc_encoders[0] = '\0';
+    for(i = 0; i < HEVC_ENCODER_COUNT; i++) {
+        if (i != 0)
+            strcat(hevc_encoders, " ");
+        strcat(hevc_encoders, hevc_encoder_name[i]);
+    }
+        
     printf("BPG Image Encoder version " CONFIG_BPG_VERSION "\n"
            "usage: bpgenc [options] infile.[jpg|png]\n"
            "\n"
@@ -1770,10 +1808,10 @@ void help(int is_full)
            "                     default=ycbcr)\n"
            "-b bit_depth         set the bit depth (8 to %d, default = %d)\n"
            "-lossless            enable lossless mode\n"
-#if defined(USE_X265)
-           "-m level             set the compression level (1 to 9, 1=fast, 9=slow, default = 7)\n"
-#endif
-           , DEFAULT_OUTFILENAME, DEFAULT_QP, BIT_DEPTH_MAX, DEFAULT_BIT_DEPTH);
+           "-e encoder           select the HEVC encoder (%s, default = %s)\n"
+           "-m level             select the compression level (1=fast, 9=slow, default = %d)\n"
+           , DEFAULT_OUTFILENAME, DEFAULT_QP, BIT_DEPTH_MAX, DEFAULT_BIT_DEPTH,
+           hevc_encoders, hevc_encoder_name[0], DEFAULT_COMPRESS_LEVEL);
     if (is_full) {
         printf("\nAdvanced options:\n"
            "-alphaq              set quantizer parameter for the alpha channel (default = same as -q value)\n"
@@ -1804,10 +1842,11 @@ int main(int argc, char **argv)
     FILE *f;
     int qp, c, option_index, sei_decoded_picture_hash, is_png, extension_buf_len;
     int keep_metadata, cb_size, width, height, compress_level, alpha_qp;
-    int bit_depth, lossless_mode;
+    int bit_depth, lossless_mode, i;
     BPGImageFormatEnum format;
     BPGColorSpaceEnum color_space;
     BPGMetaData *md;
+    HEVCEncoderEnum encoder_type;
 
     outfilename = DEFAULT_OUTFILENAME;
     qp = DEFAULT_QP;
@@ -1817,11 +1856,13 @@ int main(int argc, char **argv)
     color_space = BPG_CS_YCbCr;
     keep_metadata = 0;
     verbose = 0;
-    compress_level = 7;
+    compress_level = DEFAULT_COMPRESS_LEVEL;
     bit_depth = DEFAULT_BIT_DEPTH;
     lossless_mode = 0;
+    encoder_type = 0;
+
     for(;;) {
-        c = getopt_long_only(argc, argv, "q:o:hf:c:vm:b:", long_opts, &option_index);
+        c = getopt_long_only(argc, argv, "q:o:hf:c:vm:b:e:", long_opts, &option_index);
         if (c == -1)
             break;
         switch(c) {
@@ -1906,6 +1947,21 @@ int main(int argc, char **argv)
             break;
         case 'v':
             verbose++;
+            break;
+        case 'e':
+            for(i = 0; i < HEVC_ENCODER_COUNT; i++) {
+                if (!strcmp(optarg, hevc_encoder_name[i]))
+                    break;
+            }
+            if (i == HEVC_ENCODER_COUNT) {
+                fprintf(stderr, "Unsupported encoder. Available ones are:");
+                for(i = 0; i < HEVC_ENCODER_COUNT; i++) {
+                    fprintf(stderr, " %s", hevc_encoder_name[i]);
+                }
+                fprintf(stderr, "\n");
+                exit(1);
+            }
+            encoder_type = i;
             break;
         default:
             exit(1);
@@ -2008,7 +2064,7 @@ int main(int argc, char **argv)
     p->sei_decoded_picture_hash = sei_decoded_picture_hash;
     p->compress_level = compress_level;
     p->verbose = verbose;
-    out_buf_len = hevc_encode_picture2(&out_buf, img, p);
+    out_buf_len = hevc_encode_picture2(&out_buf, img, p, encoder_type);
     if (out_buf_len < 0) {
         fprintf(stderr, "Error while encoding picture\n");
         exit(1);
@@ -2027,7 +2083,7 @@ int main(int argc, char **argv)
         p->compress_level = compress_level;
         p->verbose = verbose;
 
-        alpha_buf_len = hevc_encode_picture2(&alpha_buf, img_alpha, p);
+        alpha_buf_len = hevc_encode_picture2(&alpha_buf, img_alpha, p, encoder_type);
         if (alpha_buf_len < 0) {
             fprintf(stderr, "Error while encoding picture (alpha plane)\n");
             exit(1);

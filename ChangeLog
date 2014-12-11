@@ -1,3 +1,13 @@
+version 0.9.2:
+
+- Fixed encoding of paletted PNG.
+- Reduced memory usage in the decoder.
+- Added faster 8 bit only Javascript decoder.
+- bpgenc: added '-e' option to explicitely select the encoder.
+- bpgenc: set default bit depth to 8.
+- bpgenc: added lossless support with x265.
+- js decoder: handle width and height attributes.
+
 version 0.9.1:
 
 - Added new meta data tags: ICC profile, XMP and thumbnail.

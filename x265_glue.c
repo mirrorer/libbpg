@@ -44,20 +44,19 @@ int x265_encode_picture(uint8_t **pbuf, Image *img,
     int preset_index;
     const char *preset;
 
-    if (img->bit_depth > x265_max_bit_depth) {
-        fprintf(stderr, "X265 must be compiled with HIGH_BIT_DEPTH=1 to have access to larger bit depths. You can alternatively use '-b 8' to force a bit depth of 8 bits.\n");
+    if (img->bit_depth != x265_max_bit_depth) {
+        fprintf(stderr, "x265 is compiled to support only %d bit depth. Use the '-b %d' option to force the bit depth.\n",
+                x265_max_bit_depth, x265_max_bit_depth);
+        return -1;
+    }
+    if (img->format == BPG_FORMAT_GRAY) {
+        fprintf(stderr, "x265 does not support monochrome (or alpha) data yet. Plase use the jctvc encoder.\n");
         return -1;
     }
 
     p = x265_param_alloc();
 
-    if (params->compress_level >= 8) {
-        preset_index = 9; /* placebo */
-    } else if (params->compress_level < 1) {
-        preset_index = 2;
-    } else {
-        preset_index = (params->compress_level + 1);
-    }
+    preset_index = params->compress_level; /* 9 is placebo */
 
     preset = x265_preset_names[preset_index];
     if (params->verbose)
@@ -104,7 +103,8 @@ int x265_encode_picture(uint8_t **pbuf, Image *img,
         p->rc.qp = params->qp + 7;
     else
         p->rc.qp = params->qp + 1;
-        
+    p->bLossless = params->lossless;
+
     enc = x265_encoder_open(p);
 
     pic = x265_picture_alloc();

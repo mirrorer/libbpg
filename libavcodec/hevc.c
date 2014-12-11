@@ -73,9 +73,10 @@ static void pic_arrays_free(HEVCContext *s)
     av_freep(&s->sh.entry_point_offset);
     av_freep(&s->sh.size);
     av_freep(&s->sh.offset);
-
+#ifdef USE_PRED
     av_buffer_pool_uninit(&s->tab_mvf_pool);
     av_buffer_pool_uninit(&s->rpl_tab_pool);
+#endif
 }
 
 /* allocate arrays that depend on frame dimensions */
@@ -120,13 +121,14 @@ static int pic_arrays_init(HEVCContext *s, const HEVCSPS *sps)
     s->vertical_bs   = av_mallocz_array(s->bs_width, s->bs_height);
     if (!s->horizontal_bs || !s->vertical_bs)
         goto fail;
-
+#ifdef USE_PRED
     s->tab_mvf_pool = av_buffer_pool_init(min_pu_size * sizeof(MvField),
                                           av_buffer_allocz);
     s->rpl_tab_pool = av_buffer_pool_init(ctb_count * sizeof(RefPicListTab),
                                           av_buffer_allocz);
     if (!s->tab_mvf_pool || !s->rpl_tab_pool)
         goto fail;
+#endif
 
     return 0;
 
@@ -337,9 +339,31 @@ static int set_sps(HEVCContext *s, const HEVCSPS *sps)
 #endif
 
     if (sps->sao_enabled) {
+#ifdef USE_SAO_SMALL_BUFFER
+        {
+            int ctb_size = 1 << s->sps->log2_ctb_size;
+            int c_count = (s->sps->chroma_format_idc != 0) ? 3 : 1;
+            int c_idx;
+
+            s->sao_pixel_buffer = 
+                av_malloc(((ctb_size + 2) * (ctb_size + 2)) << 
+                          s->sps->pixel_shift);
+            for(c_idx = 0; c_idx < c_count; c_idx++) {
+                int w = s->sps->width >> s->sps->hshift[c_idx];
+                int h = s->sps->height >> s->sps->vshift[c_idx];
+                s->sao_pixel_buffer_h[c_idx] = 
+                    av_malloc((w * 2 * s->sps->ctb_height) <<
+                              s->sps->pixel_shift);
+                s->sao_pixel_buffer_v[c_idx] = 
+                    av_malloc((h * 2 * s->sps->ctb_width) << 
+                              s->sps->pixel_shift);
+            }
+        }
+#else
         av_frame_unref(s->tmp_frame);
         ret = get_buffer_sao(s, s->tmp_frame, sps);
         s->sao_frame = s->tmp_frame;
+#endif
     }
 
     s->sps = sps;
@@ -1806,10 +1830,13 @@ static int luma_intra_pred_mode(HEVCContext *s, int x0, int y0, int pu_size,
 
     int y_ctb = (y0 >> (s->sps->log2_ctb_size)) << (s->sps->log2_ctb_size);
 
+#ifdef USE_PRED
     MvField *tab_mvf = s->ref->tab_mvf;
+    int j;
+#endif
     int intra_pred_mode;
     int candidate[3];
-    int i, j;
+    int i;
 
     // intra_pred_mode prediction does not cross vertical CTB boundaries
     if ((y0 - 1) < y_ctb)
@@ -1859,9 +1886,11 @@ static int luma_intra_pred_mode(HEVCContext *s, int x0, int y0, int pu_size,
     for (i = 0; i < size_in_pus; i++) {
         memset(&s->tab_ipm[(y_pu + i) * min_pu_width + x_pu],
                intra_pred_mode, size_in_pus);
+#ifdef USE_PRED
         for (j = 0; j < size_in_pus; j++) {
             tab_mvf[(y_pu + j) * min_pu_width + x_pu + i].pred_flag = PF_INTRA;
         }
+#endif
     }
 
     return intra_pred_mode;
@@ -1960,7 +1989,9 @@ static void intra_prediction_unit_default_value(HEVCContext *s,
     int pb_size          = 1 << log2_cb_size;
     int size_in_pus      = pb_size >> s->sps->log2_min_pu_size;
     int min_pu_width     = s->sps->min_pu_width;
+#ifdef USE_PRED
     MvField *tab_mvf     = s->ref->tab_mvf;
+#endif
     int x_pu             = x0 >> s->sps->log2_min_pu_size;
     int y_pu             = y0 >> s->sps->log2_min_pu_size;
     int j, k;
@@ -1969,10 +2000,12 @@ static void intra_prediction_unit_default_value(HEVCContext *s,
         size_in_pus = 1;
     for (j = 0; j < size_in_pus; j++)
         memset(&s->tab_ipm[(y_pu + j) * min_pu_width + x_pu], INTRA_DC, size_in_pus);
+#ifdef USE_PRED
     if (lc->cu.pred_mode == MODE_INTRA)
         for (j = 0; j < size_in_pus; j++)
             for (k = 0; k < size_in_pus; k++)
                 tab_mvf[(y_pu + j) * min_pu_width + x_pu + k].pred_flag = PF_INTRA;
+#endif
 }
 
 static int hls_coding_unit(HEVCContext *s, int x0, int y0, int log2_cb_size)
@@ -1984,7 +2017,9 @@ static int hls_coding_unit(HEVCContext *s, int x0, int y0, int log2_cb_size)
     int min_cb_width     = s->sps->min_cb_width;
     int x_cb             = x0 >> log2_min_cb_size;
     int y_cb             = y0 >> log2_min_cb_size;
+#ifdef USE_PRED
     int idx              = log2_cb_size - 2;
+#endif
     int qp_block_mask    = (1<<(s->sps->log2_ctb_size - s->pps->diff_cu_qp_delta_depth)) - 1;
     int x, y, ret;
 
@@ -3211,7 +3246,15 @@ static av_cold int hevc_decode_free(AVCodecContext *avctx)
 
     av_freep(&s->cabac_state);
 
+#ifdef USE_SAO_SMALL_BUFFER
+    av_freep(&s->sao_pixel_buffer);
+    for(i = 0; i < 3; i++) {
+        av_freep(&s->sao_pixel_buffer_h[i]);
+        av_freep(&s->sao_pixel_buffer_v[i]);
+    }
+#else
     av_frame_free(&s->tmp_frame);
+#endif
     av_frame_free(&s->output_frame);
 
     for (i = 0; i < FF_ARRAY_ELEMS(s->DPB); i++) {
@@ -3271,9 +3314,11 @@ static av_cold int hevc_init_context(AVCodecContext *avctx)
     if (!s->cabac_state)
         goto fail;
 
+#ifndef USE_SAO_SMALL_BUFFER
     s->tmp_frame = av_frame_alloc();
     if (!s->tmp_frame)
         goto fail;
+#endif
 
     s->output_frame = av_frame_alloc();
     if (!s->output_frame)

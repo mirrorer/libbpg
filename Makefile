@@ -36,8 +36,8 @@ EMCC=emcc
 
 PWD:=$(shell pwd)
 
-CFLAGS:=-Os -Wall -MMD -fno-asynchronous-unwind-tables -fdata-sections -ffunction-sections
-CFLAGS+=-D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE
+CFLAGS:=-Os -Wall -MMD -fno-asynchronous-unwind-tables -fdata-sections -ffunction-sections -fno-math-errno -fno-signed-zeros -fno-tree-vectorize -fomit-frame-pointer
+CFLAGS+=-D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_REENTRANT
 CFLAGS+=-I.
 CFLAGS+=-DCONFIG_BPG_VERSION=\"$(shell cat VERSION)\"
 ifdef USE_JCTVC_HIGH_BIT_DEPTH
@@ -46,7 +46,7 @@ endif
 
 # Emscriptem config
 EMLDFLAGS:=-s "EXPORTED_FUNCTIONS=['_bpg_decoder_open','_bpg_decoder_decode','_bpg_decoder_get_info','_bpg_decoder_start','_bpg_decoder_get_line','_bpg_decoder_close','_malloc','_free']"
-EMLDFLAGS+=-s NO_FILESYSTEM=1 -s NO_BROWSER=1 -s TOTAL_MEMORY=33554432
+EMLDFLAGS+=-s NO_FILESYSTEM=1 -s NO_BROWSER=1
 #EMLDFLAGS+=-O1 --post-js post.js
 EMLDFLAGS+=-O3 --memory-init-file 0 --closure 1 --post-js post.js
 EMCFLAGS:=$(CFLAGS)
@@ -62,22 +62,27 @@ CXXFLAGS=$(CFLAGS)
 
 PROGS=bpgdec$(EXE) bpgenc$(EXE)
 ifdef USE_EMCC
-PROGS+=bpgdec.js
+PROGS+=bpgdec.js bpgdec8b.js
 endif
 
 all: $(PROGS)
 
-FFMPEG_OBJS:=$(addprefix libavcodec/, \
+LIBBPG_OBJS:=$(addprefix libavcodec/, \
 hevc_cabac.o  hevc_filter.o  hevc.o         hevcpred.o  hevc_refs.o\
 hevcdsp.o     hevc_mvs.o     hevc_ps.o   hevc_sei.o\
 utils.o cabac.o )
-FFMPEG_OBJS+=$(addprefix libavutil/, mem.o buffer.o log2_tab.o frame.o pixdesc.o md5.o )
+LIBBPG_OBJS+=$(addprefix libavutil/, mem.o buffer.o log2_tab.o frame.o pixdesc.o md5.o )
+LIBBPG_OBJS+=libbpg.o
 
-FFMPEG_JSOBJS:=$(patsubst %.o, %.js.o, $(FFMPEG_OBJS))
+LIBBPG_JS_OBJS:=$(patsubst %.o, %.js.o, $(LIBBPG_OBJS))
 
-$(FFMPEG_OBJS) libbpg.o: CFLAGS+=-D_ISOC99_SOURCE -D_POSIX_C_SOURCE=200112 -D_XOPEN_SOURCE=600 -DHAVE_AV_CONFIG_H -std=c99 -fomit-frame-pointer -D_GNU_SOURCE=1 -D_REENTRANT -Wdeclaration-after-statement -Wall -Wdisabled-optimization -Wpointer-arith -Wredundant-decls -Wwrite-strings -Wtype-limits -Wundef -Wmissing-prototypes -Wno-pointer-to-int-cast -Wstrict-prototypes -Wempty-body -Wno-parentheses -Wno-switch -Wno-format-zero-length -Wno-pointer-sign -fno-math-errno -fno-signed-zeros -fno-tree-vectorize -Werror=format-security -Werror=implicit-function-declaration -Werror=missing-prototypes -Werror=return-type -Werror=vla -Wformat -Wno-maybe-uninitialized
+LIBBPG_JS8_OBJS:=$(patsubst %.o, %.js8.o, $(LIBBPG_OBJS))
 
-$(FFMPEG_JSOBJS) libbpg.js.o: EMCFLAGS+=-D_ISOC99_SOURCE -D_POSIX_C_SOURCE=200112 -D_XOPEN_SOURCE=600 -DHAVE_AV_CONFIG_H -std=c99 -fomit-frame-pointer -D_GNU_SOURCE=1 -D_REENTRANT -Wdeclaration-after-statement -Wall -Wdisabled-optimization -Wpointer-arith -Wredundant-decls -Wwrite-strings -Wtype-limits -Wundef -Wmissing-prototypes -Wno-pointer-to-int-cast -Wstrict-prototypes -Wempty-body -Wno-parentheses -Wno-switch -Wno-format-zero-length -Wno-pointer-sign -fno-math-errno -fno-signed-zeros -fno-tree-vectorize -Werror=format-security -Werror=implicit-function-declaration -Werror=missing-prototypes -Werror=return-type -Werror=vla -Wformat
+$(LIBBPG_OBJS): CFLAGS+=-D_ISOC99_SOURCE -D_POSIX_C_SOURCE=200112 -D_XOPEN_SOURCE=600 -DHAVE_AV_CONFIG_H -std=c99 -D_GNU_SOURCE=1 -DUSE_VAR_BIT_DEPTH
+
+$(LIBBPG_JS_OBJS): EMCFLAGS+=-D_ISOC99_SOURCE -D_POSIX_C_SOURCE=200112 -D_XOPEN_SOURCE=600 -DHAVE_AV_CONFIG_H -std=c99 -D_GNU_SOURCE=1 -DUSE_VAR_BIT_DEPTH
+
+$(LIBBPG_JS8_OBJS): EMCFLAGS+=-D_ISOC99_SOURCE -D_POSIX_C_SOURCE=200112 -D_XOPEN_SOURCE=600 -DHAVE_AV_CONFIG_H -std=c99 -D_GNU_SOURCE=1
 
 BPGENC_OBJS:=bpgenc.o
 BPGENC_LIBS:=
@@ -132,7 +137,7 @@ BPGENC_LIBS+=-lpng -ljpeg $(LIBS)
 
 bpgenc.o: CFLAGS+=-Wno-unused-but-set-variable
 
-libbpg.a: libbpg.o $(FFMPEG_OBJS) 
+libbpg.a: $(LIBBPG_OBJS) 
 	$(AR) rcs $@ $^
 
 bpgdec$(EXE): bpgdec.o libbpg.a
@@ -141,8 +146,11 @@ bpgdec$(EXE): bpgdec.o libbpg.a
 bpgenc$(EXE): $(BPGENC_OBJS)
 	$(CXX) $(LDFLAGS) -o $@ $^ $(BPGENC_LIBS)
 
-bpgdec.js: libbpg.js.o $(FFMPEG_JSOBJS) post.js
-	$(EMCC) $(EMLDFLAGS) -o $@ libbpg.js.o $(FFMPEG_JSOBJS)
+bpgdec.js: $(LIBBPG_JS_OBJS) post.js
+	$(EMCC) $(EMLDFLAGS) -s TOTAL_MEMORY=33554432 -o $@ $(LIBBPG_JS_OBJS)
+
+bpgdec8b.js: $(LIBBPG_JS8_OBJS) post.js
+	$(EMCC) $(EMLDFLAGS) -s TOTAL_MEMORY=16777216 -o $@ $(LIBBPG_JS8_OBJS)
 
 size:
 	strip bpgdec
@@ -167,6 +175,9 @@ clean:
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
 %.js.o: %.c
+	$(EMCC) $(EMCFLAGS) -c -o $@ $<
+
+%.js8.o: %.c
 	$(EMCC) $(EMCFLAGS) -c -o $@ $<
 
 -include $(wildcard *.d)
