@@ -53,13 +53,17 @@ typedef uint16_t PIXEL;
 typedef uint8_t PIXEL;
 #endif
 
+#define MAX_DATA_SIZE ((1 << 30) - 1)
+
 typedef struct {
     int c_shift;
     int c_rnd;
     int c_one;
+    int y_one, y_offset;
     int c_r_cr, c_g_cb, c_g_cr, c_b_cb;
     int c_center;
     int bit_depth;
+    int limited_range;
 } ColorConvertState;
 
 typedef void ColorConvertFunc(ColorConvertState *s, 
@@ -72,8 +76,11 @@ struct BPGDecoderContext {
     AVFrame *alpha_frame;
     int w, h;
     BPGImageFormatEnum format;
-    uint8_t has_alpha;
+    uint8_t has_alpha; /* true if alpha or W plane */
     uint8_t bit_depth;
+    uint8_t has_w_plane;
+    uint8_t limited_range;
+    uint8_t premultiplied_alpha;
     BPGColorSpaceEnum color_space;
     int keep_extension_data; /* true if the extension data must be
                                 kept during parsing */
@@ -93,6 +100,7 @@ struct BPGDecoderContext {
 };
 
 /* ffmpeg utilities */
+#ifdef USE_AV_LOG
 void av_log(void* avcl, int level, const char *fmt, ...)
 {
 #ifdef DEBUG
@@ -114,9 +122,10 @@ void avpriv_report_missing_feature(void *avc, const char *msg, ...)
     va_end(ap);
 #endif
 }
+#endif /* USE_AV_LOG */
 
 /* return < 0 if error, otherwise the consumed length */
-static int get_ue(uint32_t *pv, const uint8_t *buf, int len)
+static int get_ue32(uint32_t *pv, const uint8_t *buf, int len)
 {
     const uint8_t *p;
     uint32_t v;
@@ -146,6 +155,19 @@ static int get_ue(uint32_t *pv, const uint8_t *buf, int len)
     }
     *pv = v;
     return p - buf;
+}
+
+static int get_ue(uint32_t *pv, const uint8_t *buf, int len)
+{
+    int ret;
+    ret = get_ue32(pv, buf, len);
+    if (ret < 0)
+        return ret;
+    /* limit the maximum size to avoid overflows in buffer
+       computations */
+    if (*pv > MAX_DATA_SIZE)
+        return -1;
+    return ret;
 }
 
 static int decode_write_frame(AVCodecContext *avctx,
@@ -339,11 +361,10 @@ int bpg_decoder_get_info(BPGDecoderContext *img, BPGImageInfo *p)
     p->width = img->w;
     p->height = img->h;
     p->format = img->format;
-    if (img->color_space == BPG_CS_YCbCrK || 
-        img->color_space == BPG_CS_CMYK)
-        p->has_alpha = 0;
-    else
-        p->has_alpha = img->has_alpha;
+    p->has_alpha = img->has_alpha && !img->has_w_plane;
+    p->premultiplied_alpha = img->premultiplied_alpha;
+    p->has_w_plane = img->has_w_plane;
+    p->limited_range = img->limited_range;
     p->color_space = img->color_space;
     p->bit_depth = img->bit_depth;
     return 0;
@@ -555,8 +576,8 @@ static void ycc_to_rgb24(ColorConvertState *s, uint8_t *dst, const PIXEL *y_ptr,
     c_g_cb = s->c_g_cb;
     c_g_cr = s->c_g_cr;
     c_b_cb = s->c_b_cb;
-    c_one = s->c_one;
-    rnd = s->c_rnd;
+    c_one = s->y_one;
+    rnd = s->y_offset;
     shift = s->c_shift;
     center = s->c_center;
     for(x = 0; x < n; x++) {
@@ -579,8 +600,8 @@ static void ycgco_to_rgb24(ColorConvertState *s,
     int y_val, cb_val, cr_val, x;
     int rnd, shift, center, c_one;
 
-    c_one = s->c_one;
-    rnd = s->c_rnd;
+    c_one = s->y_one;
+    rnd = s->y_offset;
     shift = s->c_shift;
     center = s->c_center;
     for(x = 0; x < n; x++) {
@@ -613,14 +634,66 @@ static void alpha_combine8(ColorConvertState *s,
     }
 }
 
+static uint32_t divide8_table[256];
+
+#define DIV8_BITS 16
+
+static void alpha_divide8_init(void)
+{
+    int i;
+    for(i = 1; i < 256; i++) {
+        /* Note: the 128 is added to have 100% correct results for all
+           the values */
+        divide8_table[i] = ((255 << DIV8_BITS) + (i / 2) + 128) / i;
+    }
+}
+
+static inline unsigned int comp_divide8(unsigned int val, unsigned int alpha,
+                                        unsigned int alpha_inv)
+{
+    if (val >= alpha)
+        return 255;
+    return (val * alpha_inv + (1 << (DIV8_BITS - 1))) >> DIV8_BITS;
+}
+
+/* c = c / alpha */
+static void alpha_divide8(uint8_t *dst, int n)
+{
+    static int inited;
+    uint8_t *q = dst;
+    int x;
+    unsigned int a_val, a_inv;
+
+    if (!inited) {
+        inited = 1;
+        alpha_divide8_init();
+    }
+
+    for(x = 0; x < n; x++) {
+        a_val = q[3];
+        if (a_val == 0) {
+            q[0] = 255;
+            q[1] = 255;
+            q[2] = 255;
+        } else {
+            a_inv = divide8_table[a_val];
+            q[0] = comp_divide8(q[0], a_val, a_inv);
+            q[1] = comp_divide8(q[1], a_val, a_inv);
+            q[2] = comp_divide8(q[2], a_val, a_inv);
+        }
+        q += 4;
+    }
+}
+
 static void gray_to_rgb24(ColorConvertState *s, 
                           uint8_t *dst, const PIXEL *y_ptr,
+                          const PIXEL *cb_ptr, const PIXEL *cr_ptr,
                           int n, int incr)
 {
     uint8_t *q = dst;
     int x, y_val, c, rnd, shift;
 
-    if (s->bit_depth == 8) {
+    if (s->bit_depth == 8 && !s->limited_range) {
         for(x = 0; x < n; x++) {
             y_val = y_ptr[x];
             q[0] = y_val;
@@ -629,11 +702,11 @@ static void gray_to_rgb24(ColorConvertState *s,
             q += incr;
         }
     } else {
-        c = s->c_one;
-        rnd = s->c_rnd;
+        c = s->y_one;
+        rnd = s->y_offset;
         shift = s->c_shift;
         for(x = 0; x < n; x++) {
-            y_val = (y_ptr[x] * c + rnd) >> shift;
+            y_val = clamp8((y_ptr[x] * c + rnd) >> shift);
             q[0] = y_val;
             q[1] = y_val;
             q[2] = y_val;
@@ -649,7 +722,7 @@ static void rgb_to_rgb24(ColorConvertState *s, uint8_t *dst, const PIXEL *y_ptr,
     uint8_t *q = dst;
     int x, c, rnd, shift;
 
-    if (s->bit_depth == 8) {
+    if (s->bit_depth == 8 && !s->limited_range) {
         for(x = 0; x < n; x++) {
             q[0] = cr_ptr[x];
             q[1] = y_ptr[x];
@@ -657,13 +730,13 @@ static void rgb_to_rgb24(ColorConvertState *s, uint8_t *dst, const PIXEL *y_ptr,
             q += incr;
         }
     } else {
-        c = s->c_one;
-        rnd = s->c_rnd;
+        c = s->y_one;
+        rnd = s->y_offset;
         shift = s->c_shift;
         for(x = 0; x < n; x++) {
-            q[0] = (cr_ptr[x] * c + rnd) >> shift;
-            q[1] = (y_ptr[x] * c + rnd) >> shift;
-            q[2] = (cb_ptr[x] * c + rnd) >> shift;
+            q[0] = clamp8((cr_ptr[x] * c + rnd) >> shift);
+            q[1] = clamp8((y_ptr[x] * c + rnd) >> shift);
+            q[2] = clamp8((cb_ptr[x] * c + rnd) >> shift);
             q += incr;
         }
     }
@@ -708,7 +781,7 @@ static ColorConvertFunc *cs_to_rgb24[BPG_CS_COUNT] = {
     rgb_to_rgb24,
     ycgco_to_rgb24,
     ycc_to_rgb24,
-    rgb_to_rgb24,
+    ycc_to_rgb24,
 };
 
 #ifdef USE_RGB48
@@ -737,8 +810,8 @@ static void ycc_to_rgb48(ColorConvertState *s, uint8_t *dst, const PIXEL *y_ptr,
     c_g_cb = s->c_g_cb;
     c_g_cr = s->c_g_cr;
     c_b_cb = s->c_b_cb;
-    c_one = s->c_one;
-    rnd = s->c_rnd;
+    c_one = s->y_one;
+    rnd = s->y_offset;
     shift = s->c_shift;
     center = s->c_center;
     for(x = 0; x < n; x++) {
@@ -761,8 +834,8 @@ static void ycgco_to_rgb48(ColorConvertState *s,
     int y_val, cb_val, cr_val, x;
     int rnd, shift, center, c_one;
 
-    c_one = s->c_one;
-    rnd = s->c_rnd;
+    c_one = s->y_one;
+    rnd = s->y_offset;
     shift = s->c_shift;
     center = s->c_center;
     for(x = 0; x < n; x++) {
@@ -777,17 +850,18 @@ static void ycgco_to_rgb48(ColorConvertState *s,
 }
 
 static void gray_to_rgb48(ColorConvertState *s, 
-                          uint16_t *dst, const PIXEL *y_ptr,
+                          uint8_t *dst, const PIXEL *y_ptr,
+                          const PIXEL *cb_ptr, const PIXEL *cr_ptr,
                           int n, int incr)
 {
-    uint16_t *q = dst;
+    uint16_t *q = (uint16_t *)dst;
     int x, y_val, c, rnd, shift;
 
-    c = s->c_one;
-    rnd = s->c_rnd;
+    c = s->y_one;
+    rnd = s->y_offset;
     shift = s->c_shift;
     for(x = 0; x < n; x++) {
-        y_val = (y_ptr[x] * c + rnd) >> shift;
+        y_val = clamp16((y_ptr[x] * c + rnd) >> shift);
         q[0] = y_val;
         q[1] = y_val;
         q[2] = y_val;
@@ -812,14 +886,31 @@ static void gray_to_gray16(ColorConvertState *s,
     }
 }
 
+static void luma_to_gray16(ColorConvertState *s, 
+                           uint16_t *dst, const PIXEL *y_ptr,
+                           int n, int incr)
+{
+    uint16_t *q = dst;
+    int x, y_val, c, rnd, shift;
+
+    c = s->y_one;
+    rnd = s->y_offset;
+    shift = s->c_shift;
+    for(x = 0; x < n; x++) {
+        y_val = clamp16((y_ptr[x] * c + rnd) >> shift);
+        q[0] = y_val;
+        q += incr;
+    }
+}
+
 static void rgb_to_rgb48(ColorConvertState *s, 
                          uint8_t *dst, const PIXEL *y_ptr,
                          const PIXEL *cb_ptr, const PIXEL *cr_ptr,
                          int n, int incr)
 {
-    gray_to_gray16(s, (uint16_t *)dst + 1, y_ptr, n, incr);
-    gray_to_gray16(s, (uint16_t *)dst + 2, cb_ptr, n, incr);
-    gray_to_gray16(s, (uint16_t *)dst + 0, cr_ptr, n, incr);
+    luma_to_gray16(s, (uint16_t *)dst + 1, y_ptr, n, incr);
+    luma_to_gray16(s, (uint16_t *)dst + 2, cb_ptr, n, incr);
+    luma_to_gray16(s, (uint16_t *)dst + 0, cr_ptr, n, incr);
 }
 
 static void put_dummy_gray16(uint16_t *dst, int n, int incr)
@@ -850,35 +941,103 @@ static void alpha_combine16(ColorConvertState *s,
     }
 }
 
+#define DIV16_BITS 15
+
+static unsigned int comp_divide16(unsigned int val, unsigned int alpha,
+                                  unsigned int alpha_inv)
+{
+    if (val >= alpha)
+        return 65535;
+    return (val * alpha_inv + (1 << (DIV16_BITS - 1))) >> DIV16_BITS;
+}
+
+/* c = c / alpha */
+static void alpha_divide16(uint16_t *dst, int n)
+{
+    uint16_t *q = dst;
+    int x;
+    unsigned int a_val, a_inv;
+
+    for(x = 0; x < n; x++) {
+        a_val = q[3];
+        if (a_val == 0) {
+            q[0] = 65535;
+            q[1] = 65535;
+            q[2] = 65535;
+        } else {
+            a_inv = ((65535 << DIV16_BITS) + (a_val / 2)) / a_val;
+            q[0] = comp_divide16(q[0], a_val, a_inv);
+            q[1] = comp_divide16(q[1], a_val, a_inv);
+            q[2] = comp_divide16(q[2], a_val, a_inv);
+        }
+        q += 4;
+    }
+}
+
 static ColorConvertFunc *cs_to_rgb48[BPG_CS_COUNT] = {
     ycc_to_rgb48,
     rgb_to_rgb48,
     ycgco_to_rgb48,
     ycc_to_rgb48,
-    rgb_to_rgb48,
+    ycc_to_rgb48,
 };
 #endif
 
 static void convert_init(ColorConvertState *s, 
-                         int in_bit_depth, int out_bit_depth)
+                         int in_bit_depth, int out_bit_depth,
+                         BPGColorSpaceEnum color_space,
+                         int limited_range)
 {
     int c_shift, in_pixel_max, out_pixel_max;
-    double mult;
+    double mult, k_r, k_b, mult_y, mult_c;
 
     c_shift = 30 - out_bit_depth;
     in_pixel_max = (1 << in_bit_depth) - 1;
     out_pixel_max = (1 << out_bit_depth) - 1;
     mult = (double)out_pixel_max * (1 << c_shift) / (double)in_pixel_max;
-
-    s->c_r_cr = lrint(1.40200 * mult); /* 2*(1-k_r) */
-    s->c_g_cb = lrint(0.3441362862 * mult); /* -2*k_b*(1-k_b)/(1-k_b-k_r) */
-    s->c_g_cr = lrint(0.7141362862 * mult); /* -2*k_r*(1-k_r)/(1-k_b-k_r) */
-    s->c_b_cb = lrint(1.77200 * mult); /* 2*(1-k_b) */
+    if (limited_range) {
+        mult_y = (double)out_pixel_max * (1 << c_shift) / 
+            (double)(219 << (in_bit_depth - 8));
+        mult_c = (double)out_pixel_max * (1 << c_shift) / 
+            (double)(224 << (in_bit_depth - 8));
+    } else {
+        mult_y = mult;
+        mult_c = mult;
+    }
+    switch(color_space) {
+    case BPG_CS_YCbCr:
+        k_r = 0.299;
+        k_b = 0.114;
+        goto convert_ycc;
+    case BPG_CS_YCbCr_BT709:
+        k_r = 0.2126; 
+        k_b = 0.0722;
+        goto convert_ycc;
+    case BPG_CS_YCbCr_BT2020:
+        k_r = 0.2627;
+        k_b = 0.0593;
+    convert_ycc:
+        s->c_r_cr = lrint(2*(1-k_r) * mult_c);
+        s->c_g_cb = lrint(2*k_b*(1-k_b)/(1-k_b-k_r) * mult_c);
+        s->c_g_cr = lrint(2*k_r*(1-k_r)/(1-k_b-k_r) * mult_c);
+        s->c_b_cb = lrint(2*(1-k_b) * mult_c);
+        break;
+    default:
+        break;
+    }
     s->c_one = lrint(mult);
     s->c_shift = c_shift;
     s->c_rnd = (1 << (c_shift - 1));
     s->c_center = 1 << (in_bit_depth - 1);
+    if (limited_range) {
+        s->y_one = lrint(mult_y);
+        s->y_offset = -(16 << (in_bit_depth - 8)) * s->y_one + s->c_rnd;
+    } else {
+        s->y_one = s->c_one;
+        s->y_offset = s->c_rnd;
+    }
     s->bit_depth = in_bit_depth;
+    s->limited_range = limited_range;
 }
 
 static int bpg_decoder_output_init(BPGDecoderContext *s,
@@ -941,10 +1100,18 @@ static int bpg_decoder_output_init(BPGDecoderContext *s,
             }
         }
     }
-    convert_init(&s->cvt, s->bit_depth, s->is_rgb48 ? 16 : 8);
+    convert_init(&s->cvt, s->bit_depth, s->is_rgb48 ? 16 : 8,
+                 s->color_space, s->limited_range);
 
     if (s->format == BPG_FORMAT_GRAY) {
-        s->cvt_func = NULL;
+#ifdef USE_RGB48
+        if (s->is_rgb48) {
+            s->cvt_func = gray_to_rgb48;
+        } else 
+#endif
+        {
+            s->cvt_func = gray_to_rgb24;
+        }
     } else {
 #ifdef USE_RGB48
         if (s->is_rgb48) {
@@ -988,14 +1155,7 @@ int bpg_decoder_get_line(BPGDecoderContext *s, void *rgb_line1)
     incr = 3 + s->is_rgba;
     switch(s->format) {
     case BPG_FORMAT_GRAY:
-#ifdef USE_RGB48
-        if (s->is_rgb48) {
-            gray_to_rgb48(&s->cvt, (uint16_t *)rgb_line, y_ptr, w, incr);
-        } else 
-#endif
-        {
-            gray_to_rgb24(&s->cvt, rgb_line, y_ptr, w, incr);
-        }
+        s->cvt_func(&s->cvt, rgb_line, y_ptr, NULL, NULL, w, incr);
         break;
     case BPG_FORMAT_420:
         y2 = y >> 1;
@@ -1040,8 +1200,7 @@ int bpg_decoder_get_line(BPGDecoderContext *s, void *rgb_line1)
     }
 
     /* alpha output or CMYK handling */
-    if (s->color_space == BPG_CS_YCbCrK || 
-        s->color_space == BPG_CS_CMYK) {
+    if (s->has_w_plane) {
         a_ptr = (PIXEL *)(s->a_buf + y * s->a_linesize);
 #ifdef USE_RGB48
         if (s->is_rgb48) {
@@ -1063,6 +1222,8 @@ int bpg_decoder_get_line(BPGDecoderContext *s, void *rgb_line1)
                     a_ptr = (PIXEL *)(s->a_buf + y * s->a_linesize);
                     gray_to_gray16(&s->cvt, 
                                    (uint16_t *)rgb_line + 3, a_ptr, w, 4);
+                    if (s->premultiplied_alpha)
+                        alpha_divide16((uint16_t *)rgb_line, w);
                 } else {
                     put_dummy_gray16((uint16_t *)rgb_line + 3, w, 4);
                 }
@@ -1072,6 +1233,8 @@ int bpg_decoder_get_line(BPGDecoderContext *s, void *rgb_line1)
                 if (s->has_alpha) {
                     a_ptr = (PIXEL *)(s->a_buf + y * s->a_linesize);
                     gray_to_gray8(&s->cvt, rgb_line + 3, a_ptr, w, 4);
+                    if (s->premultiplied_alpha)
+                        alpha_divide8((uint8_t *)rgb_line, w);
                 } else {
                     put_dummy_gray8(rgb_line + 3, w, 4);
                 }
@@ -1112,6 +1275,9 @@ typedef struct {
     BPGImageFormatEnum format;
     uint8_t has_alpha;
     uint8_t bit_depth;
+    uint8_t has_w_plane;
+    uint8_t premultiplied_alpha;
+    uint8_t limited_range;
     BPGColorSpaceEnum color_space;
     uint32_t ycc_data_len;
     uint32_t alpha_data_len;
@@ -1122,7 +1288,7 @@ static int bpg_decode_header(BPGHeaderData *h,
                              const uint8_t *buf, int buf_len,
                              int header_only, int load_extensions)
 {
-    int idx, flags1, flags2, has_extension, ret;
+    int idx, flags1, flags2, has_extension, ret, alpha1_flag, alpha2_flag;
     uint32_t extension_data_len;
 
     if (buf_len < 6)
@@ -1138,17 +1304,31 @@ static int bpg_decode_header(BPGHeaderData *h,
     h->format = flags1 >> 5;
     if (h->format > 3)
         return -1;
-    h->has_alpha = (flags1 >> 4) & 1;
+    alpha1_flag = (flags1 >> 4) & 1;
     h->bit_depth = (flags1 & 0xf) + 8;
     if (h->bit_depth > 14)
         return -1;
     flags2 = buf[idx++];
     h->color_space = (flags2 >> 4) & 0xf;
     has_extension = (flags2 >> 3) & 1;
+    alpha2_flag = (flags2 >> 2) & 1;
+    h->limited_range = (flags2 >> 1) & 1;
+    
+    h->has_alpha = 0;
+    h->has_w_plane = 0;
+    h->premultiplied_alpha = 0;
+    
+    if (alpha1_flag) {
+        h->has_alpha = 1;
+        h->premultiplied_alpha = alpha2_flag;
+    } else if (alpha2_flag) {
+        h->has_alpha = 1;
+        h->has_w_plane = 1;
+    }
+
     if (h->color_space >= BPG_CS_COUNT || 
         (h->format == BPG_FORMAT_GRAY && h->color_space != 0) ||
-        ((h->color_space == BPG_CS_YCbCrK || h->color_space == BPG_CS_CMYK) &&
-         !h->has_alpha))
+        (h->has_w_plane && h->format == BPG_FORMAT_GRAY))
         return -1;
     ret = get_ue(&h->width, buf + idx, buf_len - idx);
     if (ret < 0)
@@ -1201,7 +1381,7 @@ static int bpg_decode_header(BPGHeaderData *h,
                 *plast_md = md;
                 plast_md = &md->next;
 
-                ret = get_ue(&md->tag, buf + idx, ext_end - idx);
+                ret = get_ue32(&md->tag, buf + idx, ext_end - idx);
                 if (ret < 0) 
                     goto fail;
                 idx += ret;
@@ -1250,6 +1430,9 @@ int bpg_decoder_decode(BPGDecoderContext *img, const uint8_t *buf, int buf_len)
     img->h = height;
     img->format = format;
     img->has_alpha = has_alpha;
+    img->premultiplied_alpha = h->premultiplied_alpha;
+    img->has_w_plane = h->has_w_plane;
+    img->limited_range = h->limited_range;
     img->color_space = color_space;
     img->bit_depth = bit_depth;
     img->first_md = h->first_md;
@@ -1364,11 +1547,10 @@ int bpg_decoder_get_info_from_buf(BPGImageInfo *p,
     p->width = h->width;
     p->height = h->height;
     p->format = h->format;
-    if (h->color_space == BPG_CS_YCbCrK || 
-        h->color_space == BPG_CS_CMYK)
-        p->has_alpha = 0;
-    else
-        p->has_alpha = h->has_alpha;
+    p->has_alpha = h->has_alpha && !h->has_w_plane;
+    p->premultiplied_alpha = h->premultiplied_alpha;
+    p->has_w_plane = h->has_w_plane;
+    p->limited_range = h->limited_range;
     p->color_space = h->color_space;
     p->bit_depth = h->bit_depth;
     if (pfirst_md)

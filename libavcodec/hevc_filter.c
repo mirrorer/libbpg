@@ -49,7 +49,7 @@ static const uint8_t betatable[52] = {
 
 static int chroma_tc(HEVCContext *s, int qp_y, int c_idx, int tc_offset)
 {
-    static const int qp_c[] = {
+    static const uint8_t qp_c[] = {
         29, 30, 31, 32, 33, 33, 34, 34, 35, 35, 36, 36, 37, 37
     };
     int qp, qp_i, offset, idxt;

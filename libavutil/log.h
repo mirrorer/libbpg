@@ -225,8 +225,11 @@ typedef struct AVClass {
  * @param fmt The format string (printf-compatible) that specifies how
  *        subsequent arguments are converted to output.
  */
+#ifdef USE_AV_LOG
 void av_log(void *avcl, int level, const char *fmt, ...) av_printf_format(3, 4);
-
+#else
+#define av_log(avcl, level, fmt, ...) do { } while (0)
+#endif
 
 /**
  * Send the specified message to the log if the level is less than or equal

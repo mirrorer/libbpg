@@ -59,6 +59,7 @@
 
 #endif /* USE_VAR_BIT_DEPTH */
 
+#ifdef USE_FUNC_PTR
 void ff_hevc_pred_init(HEVCPredContext *hpc, int bit_depth)
 {
 #undef FUNC
@@ -100,3 +101,4 @@ void ff_hevc_pred_init(HEVCPredContext *hpc, int bit_depth)
     }
 #endif /* !USE_VAR_BIT_DEPTH */
 }
+#endif

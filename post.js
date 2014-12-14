@@ -74,7 +74,7 @@ _onload: function(request, event)
         return;
     }
     
-    img_info_buf = this.malloc(6 * 4);
+    img_info_buf = this.malloc(9 * 4);
     this.bpg_decoder_get_info(img, img_info_buf);
     /* extract the image info */
     heap32 = Module['HEAPU32'];

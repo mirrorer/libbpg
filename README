@@ -81,6 +81,12 @@ as input.
 
     * grayscale images are kept unmodified.
 
+- Premultiplied alpha: by default bpgenc uses non-premultiplied alpha
+  to preserve the color components. However, premultiplied alpha
+  ('-premul' option) usually gives a better compression at the expense
+  of a loss in the color components. This loss is not an issue if the
+  image is not edited.
+
 - By default, bpgenc does not copy the metadata. You can copy them
   with the '-keepmetadata' option. For JPEG input, EXIF, ICCP and XMP
   are copied. For PNG input, ICCP is copied.

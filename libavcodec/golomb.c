@@ -28,6 +28,117 @@
 
 #include "libavutil/common.h"
 
+#ifdef CONFIG_SMALL
+
+#include "golomb.h"
+
+unsigned int get_bits(GetBitContext *s, int n)
+{
+    register int tmp;
+    OPEN_READER(re, s);
+    av_assert2(n>0 && n<=25);
+    UPDATE_CACHE(re, s);
+    tmp = SHOW_UBITS(re, s, n);
+    LAST_SKIP_BITS(re, s, n);
+    CLOSE_READER(re, s);
+    return tmp;
+}
+
+/**
+ * Show 1-25 bits.
+ */
+unsigned int show_bits(GetBitContext *s, int n)
+{
+    register int tmp;
+    OPEN_READER_NOSIZE(re, s);
+    av_assert2(n>0 && n<=25);
+    UPDATE_CACHE(re, s);
+    tmp = SHOW_UBITS(re, s, n);
+    return tmp;
+}
+
+void skip_bits(GetBitContext *s, int n)
+{
+    OPEN_READER(re, s);
+    LAST_SKIP_BITS(re, s, n);
+    CLOSE_READER(re, s);
+}
+
+unsigned int get_bits1(GetBitContext *s)
+{
+    unsigned int index = s->index;
+    uint8_t result     = s->buffer[index >> 3];
+#ifdef BITSTREAM_READER_LE
+    result >>= index & 7;
+    result  &= 1;
+#else
+    result <<= index & 7;
+    result >>= 8 - 1;
+#endif
+#if !UNCHECKED_BITSTREAM_READER
+    if (s->index < s->size_in_bits_plus8)
+#endif
+        index++;
+    s->index = index;
+
+    return result;
+}
+
+unsigned int show_bits1(GetBitContext *s)
+{
+    return show_bits(s, 1);
+}
+
+void skip_bits1(GetBitContext *s)
+{
+    skip_bits(s, 1);
+}
+
+/**
+ * Read 0-32 bits.
+ */
+unsigned int get_bits_long(GetBitContext *s, int n)
+{
+    if (!n) {
+        return 0;
+    } else if (n <= MIN_CACHE_BITS) {
+        return get_bits(s, n);
+    } else {
+#ifdef BITSTREAM_READER_LE
+        unsigned ret = get_bits(s, 16);
+        return ret | (get_bits(s, n - 16) << 16);
+#else
+        unsigned ret = get_bits(s, 16) << (n - 16);
+        return ret | get_bits(s, n - 16);
+#endif
+    }
+}
+
+unsigned get_ue_golomb_long(GetBitContext *gb)
+{
+    unsigned buf, log;
+
+    buf = show_bits_long(gb, 32);
+    log = 31 - av_log2(buf);
+    skip_bits_long(gb, log);
+
+    return get_bits_long(gb, log + 1) - 1;
+}
+
+int get_se_golomb_long(GetBitContext *gb)
+{
+    unsigned int buf = get_ue_golomb_long(gb);
+
+    if (buf & 1)
+        buf = (buf + 1) >> 1;
+    else
+        buf = -(buf >> 1);
+
+    return buf;
+}
+
+#else
+
 const uint8_t ff_golomb_vlc_len[512]={
 19,17,15,15,13,13,13,13,11,11,11,11,11,11,11,11,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,
 7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
@@ -96,7 +207,6 @@ const uint8_t ff_ue_golomb_len[256]={
 15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,17,
 };
 
-#if 0
 const uint8_t ff_interleaved_golomb_vlc_len[256]={
 9,9,7,7,9,9,7,7,5,5,5,5,5,5,5,5,
 9,9,7,7,9,9,7,7,5,5,5,5,5,5,5,5,
@@ -171,4 +281,5 @@ const uint8_t ff_interleaved_dirac_golomb_vlc_code[256]={
 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,};
+
 #endif

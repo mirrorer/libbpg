@@ -260,7 +260,10 @@ int attribute_align_arg avcodec_decode_video2(AVCodecContext *avctx, AVFrame *pi
 
 int av_image_check_size(unsigned int w, unsigned int h, int log_offset, void *log_ctx)
 {
-    return 0;
+    if ((int)w>0 && (int)h>0 && (w+128) < (INT_MAX/8) / (h + 128))
+        return 0;
+    else
+        return AVERROR(EINVAL);
 }
 
 int ff_set_sar(AVCodecContext *avctx, AVRational sar)

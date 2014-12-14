@@ -48,6 +48,7 @@
 #ifdef USE_MEM_STATS
 #include <malloc.h>
 static int mem_cur, mem_max;
+static int block_cur, block_max;
 #endif
 
 #ifdef MALLOC_PREFIX
@@ -143,6 +144,10 @@ void *av_malloc(size_t size)
             mem_max = mem_cur;
             printf("mem_max=%d\n", mem_max);
         }
+        if (++block_cur > block_max) {
+            block_max = block_cur;
+            printf("block_max=%d\n", block_max);
+        }
     }
 #endif
 #endif
@@ -181,8 +186,10 @@ void *av_realloc(void *ptr, size_t size)
     return _aligned_realloc(ptr, size + !size, ALIGN);
 #else
 #ifdef USE_MEM_STATS
-    if (ptr) 
+    if (ptr) {
         mem_cur -= malloc_usable_size(ptr);
+        block_cur--;
+    }
     printf("realloc(%p, %ld)\n", ptr, size);
     ptr = realloc(ptr, size + !size);
     if (ptr) {
@@ -190,6 +197,10 @@ void *av_realloc(void *ptr, size_t size)
         if (mem_cur > mem_max) {
             mem_max = mem_cur;
             printf("mem_max=%d\n", mem_max);
+        }
+        if (++block_cur > block_max) {
+            block_max = block_cur;
+            printf("block_max=%d\n", block_max);
         }
     }
     return ptr;
@@ -265,6 +276,7 @@ void av_free(void *ptr)
     if (ptr) {
         printf("free(%p)\n", ptr);
         mem_cur -= malloc_usable_size(ptr);
+        block_cur--;
     }
 #endif
     free(ptr);
@@ -544,3 +556,16 @@ void av_fast_malloc(void *ptr, unsigned int *size, size_t min_size)
     ff_fast_malloc(ptr, size, min_size, 0);
 }
 
+void *av_malloc_array(size_t nmemb, size_t size)
+{
+    if (!size || nmemb >= INT_MAX / size)
+        return NULL;
+    return av_malloc(nmemb * size);
+}
+
+void *av_mallocz_array(size_t nmemb, size_t size)
+{
+    if (!size || nmemb >= INT_MAX / size)
+        return NULL;
+    return av_mallocz(nmemb * size);
+}

@@ -229,9 +229,12 @@
  *                field is a pointer to an AVClass struct
  * @param[in] msg string containing the name of the missing feature
  */
+#ifdef USE_AV_LOG
 void avpriv_report_missing_feature(void *avc,
                                    const char *msg, ...) av_printf_format(2, 3);
-
+#else
+#define avpriv_report_missing_feature(avc, msg, ...) do { } while (0)
+#endif
 /**
  * Log a generic warning message about a missing feature.
  * Additionally request that a sample showcasing the feature be uploaded.

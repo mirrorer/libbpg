@@ -254,6 +254,16 @@ static inline int get_sbits(GetBitContext *s, int n)
     return tmp;
 }
 
+#ifdef CONFIG_SMALL
+unsigned int get_bits(GetBitContext *s, int n);
+unsigned int show_bits(GetBitContext *s, int n);
+void skip_bits(GetBitContext *s, int n);
+unsigned int get_bits1(GetBitContext *s);
+unsigned int show_bits1(GetBitContext *s);
+void skip_bits1(GetBitContext *s);
+unsigned int get_bits_long(GetBitContext *s, int n);
+
+#else
 /**
  * Read 1-25 bits.
  */
@@ -264,18 +274,6 @@ static inline unsigned int get_bits(GetBitContext *s, int n)
     av_assert2(n>0 && n<=25);
     UPDATE_CACHE(re, s);
     tmp = SHOW_UBITS(re, s, n);
-    LAST_SKIP_BITS(re, s, n);
-    CLOSE_READER(re, s);
-    return tmp;
-}
-
-static inline unsigned int get_bits_le(GetBitContext *s, int n)
-{
-    register int tmp;
-    OPEN_READER(re, s);
-    av_assert2(n>0 && n<=25);
-    UPDATE_CACHE_LE(re, s);
-    tmp = SHOW_UBITS_LE(re, s, n);
     LAST_SKIP_BITS(re, s, n);
     CLOSE_READER(re, s);
     return tmp;
@@ -349,6 +347,19 @@ static inline unsigned int get_bits_long(GetBitContext *s, int n)
         return ret | get_bits(s, n - 16);
 #endif
     }
+}
+#endif /* !CONFIG_SMALL */
+
+static inline unsigned int get_bits_le(GetBitContext *s, int n)
+{
+    register int tmp;
+    OPEN_READER(re, s);
+    av_assert2(n>0 && n<=25);
+    UPDATE_CACHE_LE(re, s);
+    tmp = SHOW_UBITS_LE(re, s, n);
+    LAST_SKIP_BITS(re, s, n);
+    CLOSE_READER(re, s);
+    return tmp;
 }
 
 /**

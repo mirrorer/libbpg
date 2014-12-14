@@ -1826,5 +1826,7 @@
 #define USE_SAO_SMALL_BUFFER /* reduce the memory used by SAO */
 //#define USE_PRED           /* allow non intra frames */
 //#define USE_FULL           /* include HEVC code not relevant for BPG decoding */
+//#define USE_FUNC_PTR /* use function pointers for dsp */
+//#define USE_AV_LOG /* include av_log() */
 
 #endif /* FFMPEG_CONFIG_H */

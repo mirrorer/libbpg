@@ -25,10 +25,29 @@
 #include "bit_depth_template.c"
 #include "hevcpred.h"
 
+#ifndef USE_FUNC_PTR
+static HEVC_INLINE void FUNC(pred_planar)(uint8_t *_src, const uint8_t *_top,
+                                          const uint8_t *_left, ptrdiff_t stride,
+                                          int trafo_size);
+static void FUNC(pred_dc)(uint8_t *_src, const uint8_t *_top,
+                          const uint8_t *_left,
+                          ptrdiff_t stride, int log2_size, int c_idx);
+static HEVC_INLINE void FUNC(pred_angular)(uint8_t *_src,
+                                           const uint8_t *_top,
+                                           const uint8_t *_left,
+                                           ptrdiff_t stride, int c_idx,
+                                           int mode, int size, 
+                                           int disable_intra_boundary_filter BIT_DEPTH_PARAM);
+#endif
+
 #define POS(x, y) src[(x) + stride * (y)]
 
-static HEVC_INLINE void FUNC(intra_pred)(HEVCContext *s, int x0, int y0,
-                                              int log2_size, int c_idx)
+#ifdef USE_FUNC_PTR
+static HEVC_INLINE void FUNC(intra_pred)
+#else
+void intra_pred
+#endif
+(HEVCContext *s, int x0, int y0, int log2_size, int c_idx)
 {
 #define PU(x) \
     ((x) >> s->sps->log2_min_pu_size)
@@ -337,23 +356,42 @@ do {                                  \
 
     switch (mode) {
     case INTRA_PLANAR:
+#ifdef USE_FUNC_PTR
         s->hpc.pred_planar[log2_size - 2]((uint8_t *)src, (uint8_t *)top,
                                           (uint8_t *)left, stride);
+#else
+        FUNC(pred_planar)((uint8_t *)src, (uint8_t *)top,
+                          (uint8_t *)left, stride, log2_size);
+#endif
         break;
     case INTRA_DC:
+#ifdef USE_FUNC_PTR
         s->hpc.pred_dc((uint8_t *)src, (uint8_t *)top,
                        (uint8_t *)left, stride, log2_size, c_idx);
+#else
+        FUNC(pred_dc)((uint8_t *)src, (uint8_t *)top,
+                      (uint8_t *)left, stride, log2_size, c_idx);
+#endif
         break;
     default:
         disable_intra_boundary_filter = (s->sps->implicit_rdpcm_enabled_flag &&
                                          lc->cu.cu_transquant_bypass_flag);
+#ifdef USE_FUNC_PTR
         s->hpc.pred_angular[log2_size - 2]((uint8_t *)src, (uint8_t *)top,
                                            (uint8_t *)left, stride, c_idx,
                                            mode, 
                                            disable_intra_boundary_filter BIT_DEPTH_ARG);
+#else
+        FUNC(pred_angular)((uint8_t *)src, (uint8_t *)top,
+                           (uint8_t *)left, stride, c_idx,
+                           mode, 1 << log2_size,
+                           disable_intra_boundary_filter BIT_DEPTH_ARG);
+#endif
         break;
     }
 }
+
+#ifdef USE_FUNC_PTR
 
 #define INTRA_PRED(size)                                                            \
 static void FUNC(intra_pred_ ## size)(HEVCContext *s, int x0, int y0, int c_idx)    \
@@ -367,6 +405,8 @@ INTRA_PRED(4)
 INTRA_PRED(5)
 
 #undef INTRA_PRED
+
+#endif
 
 static HEVC_INLINE void FUNC(pred_planar)(uint8_t *_src, const uint8_t *_top,
                                   const uint8_t *_left, ptrdiff_t stride,
@@ -383,6 +423,8 @@ static HEVC_INLINE void FUNC(pred_planar)(uint8_t *_src, const uint8_t *_top,
                          (size - 1 - y) * top[x]  + (y + 1) * left[size] + size) >> (trafo_size + 1);
 }
 
+#ifdef USE_FUNC_PTR
+
 #define PRED_PLANAR(size)\
 static void FUNC(pred_planar_ ## size)(uint8_t *src, const uint8_t *top,        \
                                        const uint8_t *left, ptrdiff_t stride)   \
@@ -396,6 +438,8 @@ PRED_PLANAR(2)
 PRED_PLANAR(3)
 
 #undef PRED_PLANAR
+
+#endif
 
 static void FUNC(pred_dc)(uint8_t *_src, const uint8_t *_top,
                           const uint8_t *_left,
@@ -440,11 +484,11 @@ static HEVC_INLINE void FUNC(pred_angular)(uint8_t *_src,
     const pixel *top  = (const pixel *)_top;
     const pixel *left = (const pixel *)_left;
 
-    static const int intra_pred_angle[] = {
+    static const int8_t intra_pred_angle[] = {
          32,  26,  21,  17, 13,  9,  5, 2, 0, -2, -5, -9, -13, -17, -21, -26, -32,
         -26, -21, -17, -13, -9, -5, -2, 0, 2,  5,  9, 13,  17,  21,  26,  32
     };
-    static const int inv_angle[] = {
+    static const int16_t inv_angle[] = {
         -4096, -1638, -910, -630, -482, -390, -315, -256, -315, -390, -482,
         -630, -910, -1638, -4096
     };
@@ -524,6 +568,8 @@ static HEVC_INLINE void FUNC(pred_angular)(uint8_t *_src,
     }
 }
 
+#ifdef USE_FUNC_PTR
+
 static void FUNC(pred_angular_0)(uint8_t *src, const uint8_t *top,
                                  const uint8_t *left,
                                  ptrdiff_t stride, int c_idx, int mode,
@@ -559,6 +605,7 @@ static void FUNC(pred_angular_3)(uint8_t *src, const uint8_t *top,
     FUNC(pred_angular)(src, top, left, stride, c_idx, mode, 1 << 5,
                        disable_intra_boundary_filter BIT_DEPTH_ARG);
 }
+#endif
 
 #undef EXTEND_LEFT_CIP
 #undef EXTEND_RIGHT_CIP

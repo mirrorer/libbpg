@@ -37,8 +37,8 @@ typedef enum {
     BPG_CS_YCbCr,
     BPG_CS_RGB,
     BPG_CS_YCgCo,
-    BPG_CS_YCbCrK,
-    BPG_CS_CMYK,
+    BPG_CS_YCbCr_BT709,
+    BPG_CS_YCbCr_BT2020,
 
     BPG_CS_COUNT,
 } BPGColorSpaceEnum;
@@ -50,6 +50,9 @@ typedef struct {
     int has_alpha; /* TRUE if an alpha plane is present */
     int color_space; /* see BPGColorSpaceEnum */
     int bit_depth;
+    int premultiplied_alpha; /* TRUE if the color is alpha premultiplied */
+    int has_w_plane; /* TRUE if a W plane is present (for CMYK encoding) */
+    int limited_range; /* TRUE if limited range for the color */
 } BPGImageInfo;
 
 typedef enum {
@@ -68,9 +71,9 @@ typedef struct BPGExtensionData {
 
 typedef enum {
     BPG_OUTPUT_FORMAT_RGB24,
-    BPG_OUTPUT_FORMAT_RGBA32,
+    BPG_OUTPUT_FORMAT_RGBA32, /* not premultiplied alpha */
     BPG_OUTPUT_FORMAT_RGB48,
-    BPG_OUTPUT_FORMAT_RGBA64,
+    BPG_OUTPUT_FORMAT_RGBA64, /* not premultiplied alpha */
 } BPGDecoderOutputFormat;
 
 #define BPG_DECODER_INFO_BUF_SIZE 16

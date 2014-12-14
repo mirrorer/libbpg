@@ -31,6 +31,9 @@ typedef struct {
     int w, h;
     BPGImageFormatEnum format;
     uint8_t has_alpha;
+    uint8_t has_w_plane;
+    uint8_t limited_range;
+    uint8_t premultiplied_alpha;
     BPGColorSpaceEnum color_space;
     uint8_t bit_depth;
     uint8_t pixel_shift; /* (1 << pixel_shift) bytes per pixel */

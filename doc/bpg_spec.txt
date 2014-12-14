@@ -1,6 +1,6 @@
 BPG Specification
 
-version 0.9.2
+version 0.9.3
 
 Copyright (c) 2014 Fabrice Bellard
 
@@ -8,16 +8,17 @@ Copyright (c) 2014 Fabrice Bellard
 ---------------
 
 BPG is a lossy and lossless picture compression format based on HEVC
-[1]. It supports grayscale, CCIR 601 YCbCr, RGB, YCgCo color spaces
-with an optional alpha channel. The CMYK color space is also supported
-with an RGB or YCbCr color space. The bit depth of each component is
-from 8 to 14 bits.
+[1]. It supports grayscale, YCbCr, RGB, YCgCo color spaces with an
+optional alpha channel. CMYK is supported by reusing the alpha channel
+to encode an additional white component. The bit depth of each
+component is from 8 to 14 bits. The color values are stored either in
+full range (JPEG case) or limited range (video case). The YCbCr color
+space is either BT 601 (JPEG case), BT 709 or BT 2020.
 
 The chroma can be subsampled by a factor of two in horizontal or both
 in horizontal and vertical directions (4:4:4, 4:2:2 or 4:2:0 chroma
 formats are supported). The chroma is sampled at the same position
-relative to the luma as in the JPEG format [2] and uses the full range
-of values. 
+relative to the luma as in the JPEG format [2].
 
 Arbitrary metadata (such as EXIF, ICC profile, XMP) are supported.
 
@@ -57,12 +58,14 @@ heic_file() {
      file_magic                                                  u(32)
 
      pixel_format                                                u(3)
-     alpha_present_flag                                          u(1)
+     alpha1_flag                                                 u(1)
      bit_depth_minus_8                                           u(4)
 
      color_space                                                 u(4)
      extension_present_flag                                      u(1)
-     reserved_zeros                                              u(3)
+     alpha2_flag                                                 u(1)
+     limited_range_flag                                          u(1)
+     reserved_zero                                               u(1)
      
      picture_width                                               ue7(32)
      picture_height                                              ue7(32)
@@ -70,7 +73,7 @@ heic_file() {
      picture_data_length                                         ue7(32)
      if (extension_present_flag)  
         extension_data_length                                    ue7(32)
-     if (alpha_present_flag)  
+     if (alpha1_flag || alpha2_flag)
         alpha_data_length                                        ue7(32)
     
      if (extension_present_flag) {
@@ -79,7 +82,7 @@ heic_file() {
 
      hevc_header_and_data()
 
-     if (alpha_present_flag) {
+     if (alpha1_flag || alpha2_flag) {
          hevc_header_and_data()
      }
 
@@ -148,7 +151,7 @@ hevc_data()
 
      'file_magic' is defined as 0x425047fb.
 
-     'pixel_format' indicates the chroma subsamping:
+     'pixel_format' indicates the chroma subsampling:
 
        0 : Grayscale
        1 : 4:2:0
@@ -160,51 +163,82 @@ hevc_data()
        The chroma samples in the 4:2:0 and 4:2:2 formats are sampled
        at the same position as JPEG [2].
 
-     'alpha_present_flag' indicates that the picture contains an alpha
-     plane in addition to the color data. When an alpha plane is
-     present, the color data is not pre-multiplied.
+     'alpha1_flag' and 'alpha2_flag' give information about the alpha plane:
+
+       alpha1_flag=0 alpha2_flag=0: no alpha plane.
+
+       alpha1_flag=1 alpha2_flag=0: alpha present. The color is not
+       premultiplied.
+        
+       alpha1_flag=1 alpha2_flag=1: alpha present. The color is
+       premultiplied. The resulting non-premultiplied R', G', B' shall
+       be recovered as:
+          
+         if A != 0 
+           R' = min(R / A, 1), G' = min(G / A, 1), B' = min(B / A, 1)
+         else
+           R' = G' = B' = 1 .
+         
+       alpha1_flag=0 alpha2_flag=1: the alpha plane is present and
+       contains the W color component (CMYK color). The resulting CMYK
+       data can be recovered as follows:
+
+         C = (1 - R), M = (1 - G), Y = (1 - B), K = (1 - W) .
      
+       In case no color profile is specified, the sRGB color R'G'B'
+       shall be computed as: 
+
+         R' = R * W, G' = G * W, B' = B * W .
+
      'bit_depth_minus_8' is the number of bits used for each component
      minus 8. In this version of the specification, bit_depth_minus_8
      <= 6.
 
      'extension_present_flag' indicates that extension data are
-     present. These data are ignored by the current decoders.
+     present.
 
-     'color_space' indicates the color space. It must be 0 when
-     pixel_format = 0 (grayscale):
+     'color_space' specifies how to convert the color planes to
+     RGB. It must be 0 when pixel_format = 0 (grayscale):
 
-       0 : YCbCr (CCIR 601, same as JPEG)
+       0 : YCbCr (BT 601, same as JPEG and HEVC matrix_coeffs = 5)
        1 : RGB (component order: G B R)
        2 : YCgCo (same as HEVC matrix_coeffs = 8)
-       3 : YCbCrK
-       4 : CMYK
+       3 : YCbCr (BT 709, same as HEVC matrix_coeffs = 1)
+       4 : YCbCr (BT 2020 non constant luminance system, same as HEVC
+       matrix_coeffs = 9)
+       5 : reserved for BT 2020 constant luminance system, not
+       supported in this version of the specification.
 
        The other values are reserved.
 
-       YCbCr is defined as full range CCIR 601 YCbCr.
+       YCbCr is defined using the BT 601, BT 709 or BT 2020 conversion
+       matrices.
 
-       RGB is defined as full range RGB. G is stored as the Y plane. B
-       in the Cb plane and R in the Cr plane.
+       For RGB, G is stored as the Y plane. B in the Cb plane and R in
+       the Cr plane.
 
        YCgCo is defined as HEVC matrix_coeffs = 8, full range. Y is
        stored in the Y plane. Cg in the Cb plane and Co in the Cr
        plane.
        
-       YCbCrK is an encoding for CMYK data. Y, Cb and Cr are stored in
-       their respective planes. K' is stored in the alpha plane which
-       must be present. The original CMYK data shall be recovered as
-       follows:
-           - Convert the YCbCr data to RGB data.
-           - C = (1 - R), M = (1 - G), Y = (1 - B), K = (1 - K')
-             
-       CMYK is an encoding for CMYK data. G is stored as the Y
-       plane. B in the Cb plane and R in the Cr plane. K' is stored in
-       the alpha plane which must be present. The original CMYK data
-       shall be recovered as follows:
-           - C = (1 - R), M = (1 - G), Y = (1 - B), K = (1 - K')
-          
-     'reserved_zeros' must be 0 in this version.
+       If no color profile is present, the RGB output data are assumed
+       to be in the sRGB color space [6].
+
+     'limited_range_flag': opposite of the HEVC video_full_range_flag.
+     The value zero indicates that the full range of each color
+     component is used. The value one indicates that a limited range
+     is used:
+
+          - (16 << (bit_depth - 8) to (235 << (bit_depth - 8)) for Y
+     and G, B, R,
+          - (16 << (bit_depth - 8) to (240 << (bit_depth - 8)) for Cb and Cr.
+
+     For the YCgCo color space, the range limitation shall be done on
+     the RGB data.
+
+     The alpha (or W) plane always uses the full range.
+
+     'reserved_zero' must be 0 in this version.
 
      'picture_width' is the picture width in pixels. The value 0 is
      not allowed.
@@ -334,21 +368,24 @@ information.
 
 - Alpha support: alpha support is mandatory. We chose to use a
   separate HEVC monochrome plane to handle it instead of another
-  format to simplify the decoder.
+  format to simplify the decoder. The color is either
+  non-premultiplied or premultiplied. Premultiplied alpha usually
+  gives a better compression. Non-premultiplied alpha is supported in
+  case no loss is needed on the color components.
 
 - Color spaces: In addition to YCbCr, RGB is supported for the high
   quality or lossless cases. YCgCo is supported because it may give
-  slightly better results than YCbCr for high quality
-  images. CMYK/YCbCrK are supported so that JPEGs containing these
-  color space can be converted. The alpha plane is used to store the K
-  plane. The data is stored with inverted components (1-X) so that the
-  conversion to RGB is simplified.
+  slightly better results than YCbCr for high quality images. CMYK is
+  supported so that JPEGs containing this color space can be
+  converted. The alpha plane is used to store the W (1-K) plane. The
+  data is stored with inverted components (1-X) so that the conversion
+  to RGB is simplified. The support of the BT 709 and BT 2020 (non
+  constant luminance) YCbCr encodings and of the limited range color
+  values were added to reduce the losses when converting video frames.
 
 - Bit depth: we decided to support the HEVC bit depths 8 to 14. The
   added complexity is small and it allows to support high quality
-  pictures from cameras. The default bit depth in the encoder is 10 so
-  that a slightly higher compression is achieved because there are
-  less rounding errors in the decoding steps.
+  pictures from cameras.
 
 - Picture file format: keeping a completely standard HEVC stream would
   have meant a more difficult parsing for the picture header which is
@@ -385,3 +422,5 @@ information.
 [4] The International Color Consortium ( http://www.color.org/ )
 
 [5] Extensible Metadata Platform (XMP) http://www.adobe.com/devnet/xmp.html
+
+[6] sRGB color space, IEC 61966-2-1.

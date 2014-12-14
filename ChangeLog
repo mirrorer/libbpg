@@ -1,3 +1,14 @@
+version 0.9.3:
+
+- Fixed small palette PNG.
+- Added support for BT 709 and BT 2020 YCbCr.
+- Added limited range color support.
+- Changed CMYK signalling.
+- Added premultiplied alpha support.
+- Specified the output RGB color space if no color profile is present.
+- Reduced the size of the js decoder.
+- Removed buffer overflows.
+
 version 0.9.2:
 
 - Fixed encoding of paletted PNG.

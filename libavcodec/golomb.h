@@ -47,6 +47,14 @@ extern const uint8_t ff_interleaved_ue_golomb_vlc_code[256];
 extern const  int8_t ff_interleaved_se_golomb_vlc_code[256];
 extern const uint8_t ff_interleaved_dirac_golomb_vlc_code[256];
 
+#ifdef CONFIG_SMALL
+unsigned get_ue_golomb_long(GetBitContext *gb);
+
+static inline int get_ue_golomb(GetBitContext *gb)
+{
+    return get_ue_golomb_long(gb);
+}
+#else
 /**
  * Read an unsigned Exp-Golomb code in the range 0 to UINT32_MAX-1.
  */
@@ -61,12 +69,6 @@ static inline unsigned get_ue_golomb_long(GetBitContext *gb)
     return get_bits_long(gb, log + 1) - 1;
 }
 
-#ifdef CONFIG_SMALL
-static inline int get_ue_golomb(GetBitContext *gb)
-{
-    return get_ue_golomb_long(gb);
-}
-#else
 /**
  * read unsigned exp golomb code.
  */
@@ -184,6 +186,14 @@ static inline int get_te_golomb(GetBitContext *gb, int range)
         return get_ue_golomb(gb);
 }
 
+#ifdef CONFIG_SMALL
+int get_se_golomb_long(GetBitContext *gb);
+
+static inline int get_se_golomb(GetBitContext *gb)
+{
+    return get_se_golomb_long(gb);
+}
+#else
 static inline int get_se_golomb_long(GetBitContext *gb)
 {
     unsigned int buf = get_ue_golomb_long(gb);
@@ -196,12 +206,6 @@ static inline int get_se_golomb_long(GetBitContext *gb)
     return buf;
 }
 
-#ifdef CONFIG_SMALL
-static inline int get_se_golomb(GetBitContext *gb)
-{
-    return get_se_golomb_long(gb);
-}
-#else
 /**
  * read signed exp golomb code.
  */

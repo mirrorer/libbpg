@@ -90,12 +90,7 @@ void *av_malloc(size_t size) av_malloc_attrib av_alloc_size(1);
  * be allocated.
  * @see av_malloc()
  */
-av_alloc_size(1, 2) static inline void *av_malloc_array(size_t nmemb, size_t size)
-{
-    if (!size || nmemb >= INT_MAX / size)
-        return NULL;
-    return av_malloc(nmemb * size);
-}
+av_alloc_size(1, 2) void *av_malloc_array(size_t nmemb, size_t size);
 
 /**
  * Allocate or reallocate a block of memory.
@@ -225,12 +220,7 @@ void *av_calloc(size_t nmemb, size_t size) av_malloc_attrib;
  * @see av_mallocz()
  * @see av_malloc_array()
  */
-av_alloc_size(1, 2) static inline void *av_mallocz_array(size_t nmemb, size_t size)
-{
-    if (!size || nmemb >= INT_MAX / size)
-        return NULL;
-    return av_mallocz(nmemb * size);
-}
+av_alloc_size(1, 2) void *av_mallocz_array(size_t nmemb, size_t size);
 
 /**
  * Duplicate the string s.

@@ -46,8 +46,15 @@
  * 7.4.2.1
  */
 #define MAX_SUB_LAYERS 7
+#ifdef USE_MSPS
 #define MAX_VPS_COUNT 16
 #define MAX_SPS_COUNT 32
+#define MAX_DPB_COUNT 1
+#else
+#define MAX_VPS_COUNT 1
+#define MAX_SPS_COUNT 1
+#define MAX_DPB_COUNT 32
+#endif
 #define MAX_PPS_COUNT 256
 #define MAX_SHORT_TERM_RPS_COUNT 64
 #define MAX_CU_SIZE 128
@@ -839,7 +846,7 @@ typedef struct HEVCContext {
     enum NALUnitType nal_unit_type;
     int temporal_id;  ///< temporal_id_plus1 - 1
     HEVCFrame *ref;
-    HEVCFrame DPB[32];
+    HEVCFrame DPB[MAX_DPB_COUNT];
     int poc;
     int pocTid0;
     int slice_idx; ///< number of the slice being currently decoded
@@ -851,7 +858,9 @@ typedef struct HEVCContext {
 
     int is_decoded;
 
+#ifdef USE_FUNC_PTR
     HEVCPredContext hpc;
+#endif
     HEVCDSPContext hevcdsp;
 #ifdef USE_PRED
     VideoDSPContext vdsp;
@@ -1049,6 +1058,10 @@ void ff_hevc_hls_residual_coding(HEVCContext *s, int x0, int y0,
                                  int c_idx);
 
 void ff_hevc_hls_mvd_coding(HEVCContext *s, int x0, int y0, int log2_cb_size);
+
+#ifndef USE_FUNC_PTR
+void intra_pred (HEVCContext *s, int x0, int y0, int log2_size, int c_idx);
+#endif
 
 extern const uint8_t ff_hevc_qpel_extra_before[4];
 extern const uint8_t ff_hevc_qpel_extra_after[4];
