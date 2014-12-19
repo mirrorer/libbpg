@@ -91,6 +91,10 @@ as input.
   with the '-keepmetadata' option. For JPEG input, EXIF, ICCP and XMP
   are copied. For PNG input, ICCP is copied.
 
+- Objective comparisons: the JCTVC encoder is tuned for PSNR only, not
+  for SSIM, so you should use PSNR when making objective comparison
+  with other formats. x265 is tuned by default for SSIM.
+
 3) BPG decoder
 --------------
 
@@ -130,7 +134,11 @@ into it. Stylesheets are supported (the 'id' and 'class' attributes
 are preserved). The 'width' and 'height' attributes are supported only
 with pixel units.
 
-asm.js gives an interesting speed boost, so we hope that more browser
+The image data is downloaded with the XMLHttpRequest object. So the
+BPG images and the BPG Javascript decoder must be in the same domain
+unless Cross-Origin Resource Sharing is used.
+
+asm.js gives an interesting speed boost, so we hope that more browsers
 will support this Javascript subset.
 
 6) FFmpeg modifications

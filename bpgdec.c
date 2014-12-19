@@ -174,11 +174,13 @@ static void bpg_show_info(const char *filename, int show_extensions)
     FILE *f;
     BPGImageInfo p_s, *p = &p_s;
     BPGExtensionData *first_md, *md;
-    static const char *format_str[4] = {
+    static const char *format_str[6] = {
         "Gray",
         "4:2:0",
         "4:2:2",
         "4:4:4",
+        "4:2:0_video",
+        "4:2:2_video",
     };
     static const char *color_space_str[BPG_CS_COUNT] = {
         "YCbCr",

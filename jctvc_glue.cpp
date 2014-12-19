@@ -139,6 +139,12 @@ int jctvc_encode_picture(uint8_t **pbuf, Image *img,
         add_opt(&argc, argv, "--HadamardME=0");
     }
 
+#if 0
+    /* TEST with several slices */
+    add_opt(&argc, argv, "--SliceMode=2");
+    add_opt(&argc, argv, "--SliceArgument=5");
+#endif
+
     /* trailing NULL */
     argv[argc] = NULL;
 

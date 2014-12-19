@@ -1,6 +1,6 @@
 BPG Specification
 
-version 0.9.3
+version 0.9.4
 
 Copyright (c) 2014 Fabrice Bellard
 
@@ -17,8 +17,12 @@ space is either BT 601 (JPEG case), BT 709 or BT 2020.
 
 The chroma can be subsampled by a factor of two in horizontal or both
 in horizontal and vertical directions (4:4:4, 4:2:2 or 4:2:0 chroma
-formats are supported). The chroma is sampled at the same position
-relative to the luma as in the JPEG format [2].
+formats are supported). In order to be able to transcode JPEG images
+or video frames without modification to the chroma, both JPEG and
+MPEG2 chroma sample positions are supported.
+
+Progressive decoding and display is supported by interleaving the
+alpha and color data.
 
 Arbitrary metadata (such as EXIF, ICC profile, XMP) are supported.
 
@@ -73,24 +77,17 @@ heic_file() {
      picture_data_length                                         ue7(32)
      if (extension_present_flag)  
         extension_data_length                                    ue7(32)
-     if (alpha1_flag || alpha2_flag)
-        alpha_data_length                                        ue7(32)
     
      if (extension_present_flag) {
          extension_data()
      }
 
      hevc_header_and_data()
-
-     if (alpha1_flag || alpha2_flag) {
-         hevc_header_and_data()
-     }
-
 }
 
 extension_data() 
 {
-     for(i = 0; i < v; i++) {
+     while (more_bytes()) {
          extension_tag                                           ue7(32)
          extension_tag_length                                    ue7(32)
          for(j = 0; j < extension_tag_length; j++) {
@@ -100,6 +97,15 @@ extension_data()
 }
      
 hevc_header_and_data()
+{
+     if (alpha1_flag || alpha2_flag) {
+         hevc_header()
+     }
+     hevc_header()
+     hevc_data()
+}
+
+hevc_header()
 {
      hevc_header_length                                          ue7(32)
      log2_min_luma_coding_block_size_minus3                      ue(v)
@@ -134,8 +140,6 @@ hevc_header_and_data()
          cabac_bypass_alignment_enabled_flag                     u(1)
      }
      trailing_bits                                               u(v)
-
-     hevc_data()
 }
 
 hevc_data() 
@@ -154,9 +158,11 @@ hevc_data()
      'pixel_format' indicates the chroma subsampling:
 
        0 : Grayscale
-       1 : 4:2:0
-       2 : 4:2:2
+       1 : 4:2:0. Chroma at position (0.5, 0.5) (JPEG chroma position)
+       2 : 4:2:2. Chroma at position (0.5, 0) (JPEG chroma position)
        3 : 4:4:4
+       4 : 4:2:0. Chroma at position (0, 0.5) (MPEG2 chroma position)
+       5 : 4:2:2. Chroma at position (0, 0) (MPEG2 chroma position)
 
        The other values are reserved.
        
@@ -217,9 +223,8 @@ hevc_data()
        For RGB, G is stored as the Y plane. B in the Cb plane and R in
        the Cr plane.
 
-       YCgCo is defined as HEVC matrix_coeffs = 8, full range. Y is
-       stored in the Y plane. Cg in the Cb plane and Co in the Cr
-       plane.
+       YCgCo is defined as HEVC matrix_coeffs = 8. Y is stored in the
+       Y plane. Cg in the Cb plane and Co in the Cr plane.
        
        If no color profile is present, the RGB output data are assumed
        to be in the sRGB color space [6].
@@ -246,11 +251,11 @@ hevc_data()
      'picture_height' is the picture height in pixels. The value 0 is
      not allowed.
 
-     'picture_data_length' is the picture data length in bytes.
+     'picture_data_length' is the picture data length in bytes. The
+     special value of zero indicates that the picture data goes up to
+     the end of the file.
 
      'extension_data_length' is the extension data length in bytes.
-
-     'alpha_data_length' is the alpha data length in bytes.
 
      'extension_data()' is the extension data.
 
@@ -320,7 +325,19 @@ hevc_data()
      - bit_depth_luma_minus8 = bit_depth_minus_8
      - bit_depth_chroma_minus8 = bit_depth_minus_8
      - scaling_list_enabled_flag = 0
-                    
+
+     Alpha data encoding:
+
+     - If alpha data is present, all the corresponding NALs have
+       nuh_layer_id = 1. NALs for color data shall have nuh_layer_id =
+       0.
+     - Alpha data shall use the same tile sizes as color data and
+       shall have the same entropy_coding_sync_enabled_flag value as
+       color data.
+     - Alpha slices shall use the same number of coding units as color
+       slices and should be interleaved with color slices. alpha NALs
+       shall come before the corresponding color NALs.
+
 3.3) HEVC Profile
 -----------------
 
@@ -361,7 +378,7 @@ information.
 
 - Pixel formats: we wanted to be able to convert JPEG images to BPG
   with as little loss as possible. So supporting the same color space
-  (CCIR 601 YCbCr) with the same range (full range) and most of the
+  (BT 601 YCbCr) with the same range (full range) and most of the
   allowed JPEG chroma formats (4:4:4, 4:2:2, 4:2:0 or grayscale) was
   mandatory to avoid going back to RGB or doing a subsampling or
   interpolation.
@@ -371,7 +388,14 @@ information.
   format to simplify the decoder. The color is either
   non-premultiplied or premultiplied. Premultiplied alpha usually
   gives a better compression. Non-premultiplied alpha is supported in
-  case no loss is needed on the color components.
+  case no loss is needed on the color components. In order to allow
+  progressive display, the alpha and color data are interleaved (the
+  nuh_layed_id NAL field is 0 for color data and 1 for alpha
+  data). The alpha and color slices should contain the same number of
+  coding units and each alpha slice should come before the
+  corresponding color slice. Since alpha slices are usually smaller
+  than color slices, it allows a progressive display even if there is
+  a single slice.
 
 - Color spaces: In addition to YCbCr, RGB is supported for the high
   quality or lossless cases. YCgCo is supported because it may give
@@ -423,4 +447,4 @@ information.
 
 [5] Extensible Metadata Platform (XMP) http://www.adobe.com/devnet/xmp.html
 
-[6] sRGB color space, IEC 61966-2-1.
+[6] sRGB color space, IEC 61966-2-1

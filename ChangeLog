@@ -1,3 +1,12 @@
+version 0.9.4:
+
+- Modified alpha plane encoding to allow progressive display and
+  streaming encoding. This change is incompatible, so images
+  containing alpha from the previous versions of the format cannot be
+  decoded.
+
+- Added 4:2:2 and 4:2:0 chroma formats with MPEG2 chroma sample position.
+
 version 0.9.3:
 
 - Fixed small palette PNG.
