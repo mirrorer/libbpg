@@ -51,7 +51,7 @@ static void ppm_save(BPGDecoderContext *img, const char *filename)
 
     rgb_line = malloc(3 * w);
 
-    f = fopen(filename,"w");
+    f = fopen(filename,"wb");
     if (!f) {
         fprintf(stderr, "%s: I/O error\n", filename);
         exit(1);
