@@ -78,33 +78,33 @@ typedef struct HEVCDSPContext {
                                uint8_t *horiz_edge, uint8_t *diag_edge BIT_DEPTH_PARAM);
 
     void (*put_hevc_qpel[10][2][2])(int16_t *dst, uint8_t *src, ptrdiff_t srcstride,
-                                    int height, intptr_t mx, intptr_t my, int width);
+                                    int height, intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM);
     void (*put_hevc_qpel_uni[10][2][2])(uint8_t *dst, ptrdiff_t dststride, uint8_t *src, ptrdiff_t srcstride,
-                                        int height, intptr_t mx, intptr_t my, int width);
+                                        int height, intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM);
     void (*put_hevc_qpel_uni_w[10][2][2])(uint8_t *_dst, ptrdiff_t _dststride, uint8_t *_src, ptrdiff_t _srcstride,
-                                          int height, int denom, int wx, int ox, intptr_t mx, intptr_t my, int width);
+                                          int height, int denom, int wx, int ox, intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM);
 
     void (*put_hevc_qpel_bi[10][2][2])(uint8_t *dst, ptrdiff_t dststride, uint8_t *_src, ptrdiff_t _srcstride,
                                        int16_t *src2,
-                                       int height, intptr_t mx, intptr_t my, int width);
+                                       int height, intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM);
     void (*put_hevc_qpel_bi_w[10][2][2])(uint8_t *dst, ptrdiff_t dststride, uint8_t *_src, ptrdiff_t _srcstride,
                                          int16_t *src2,
                                          int height, int denom, int wx0, int wx1,
-                                         int ox0, int ox1, intptr_t mx, intptr_t my, int width);
+                                         int ox0, int ox1, intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM);
     void (*put_hevc_epel[10][2][2])(int16_t *dst, uint8_t *src, ptrdiff_t srcstride,
-                                    int height, intptr_t mx, intptr_t my, int width);
+                                    int height, intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM);
 
     void (*put_hevc_epel_uni[10][2][2])(uint8_t *dst, ptrdiff_t dststride, uint8_t *_src, ptrdiff_t _srcstride,
-                                        int height, intptr_t mx, intptr_t my, int width);
+                                        int height, intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM);
     void (*put_hevc_epel_uni_w[10][2][2])(uint8_t *_dst, ptrdiff_t _dststride, uint8_t *_src, ptrdiff_t _srcstride,
-                                          int height, int denom, int wx, int ox, intptr_t mx, intptr_t my, int width);
+                                          int height, int denom, int wx, int ox, intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM);
     void (*put_hevc_epel_bi[10][2][2])(uint8_t *dst, ptrdiff_t dststride, uint8_t *_src, ptrdiff_t _srcstride,
                                        int16_t *src2,
-                                       int height, intptr_t mx, intptr_t my, int width);
+                                       int height, intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM);
     void (*put_hevc_epel_bi_w[10][2][2])(uint8_t *dst, ptrdiff_t dststride, uint8_t *_src, ptrdiff_t _srcstride,
                                          int16_t *src2,
                                          int height, int denom, int wx0, int ox0, int wx1,
-                                         int ox1, intptr_t mx, intptr_t my, int width);
+                                         int ox1, intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM);
 
     void (*hevc_h_loop_filter_luma)(uint8_t *pix, ptrdiff_t stride,
                                     int beta, int32_t *tc,

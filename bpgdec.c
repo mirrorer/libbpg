@@ -51,7 +51,7 @@ static void ppm_save(BPGDecoderContext *img, const char *filename)
 
     rgb_line = malloc(3 * w);
 
-    f = fopen(filename,"w");
+    f = fopen(filename,"wb");
     if (!f) {
         fprintf(stderr, "%s: I/O error\n", filename);
         exit(1);
@@ -195,6 +195,7 @@ static void bpg_show_info(const char *filename, int show_extensions)
         "ICC profile",
         "XMP",
         "Thumbnail",
+        "Animation control",
     };
         
     f = fopen(filename, "rb");
@@ -232,16 +233,17 @@ static void bpg_show_info(const char *filename, int show_extensions)
         printf(" alpha=%d premul=%d", 
                p->has_alpha, p->premultiplied_alpha);
     }
-    printf(" format=%s limited_range=%d bit_depth=%d\n",
+    printf(" format=%s limited_range=%d bit_depth=%d animation=%d\n",
            format_str[p->format],
            p->limited_range,
-           p->bit_depth);
+           p->bit_depth,
+           p->has_animation);
            
     if (first_md) {
         const char *tag_name;
         printf("Extension data:\n");
         for(md = first_md; md != NULL; md = md->next) {
-            if (md->tag <= 4)
+            if (md->tag <= 5)
                 tag_name = extension_tag_str[md->tag];
             else
                 tag_name = extension_tag_str[0];

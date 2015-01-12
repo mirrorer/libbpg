@@ -49,7 +49,11 @@
 #ifdef USE_MSPS
 #define MAX_VPS_COUNT 16
 #define MAX_SPS_COUNT 32
+#ifdef USE_PRED
+#define MAX_DPB_COUNT 32
+#else
 #define MAX_DPB_COUNT 1
+#endif
 #else
 #define MAX_VPS_COUNT 1
 #define MAX_SPS_COUNT 1
@@ -944,6 +948,9 @@ typedef struct HEVCContext {
     int sei_hflip, sei_vflip;
 
     int picture_struct;
+#ifdef USE_FRAME_DURATION_SEI
+    uint16_t frame_duration;
+#endif
 } HEVCContext;
 
 int ff_hevc_decode_short_term_rps(HEVCContext *s, ShortTermRPS *rps,

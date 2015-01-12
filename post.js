@@ -25,6 +25,8 @@ window['BPGDecoder'] = function(ctx) {
     this.ctx = ctx;
     this['imageData'] = null;
     this['onload'] = null;
+    this['frames'] = null;
+    this['loop_count'] = 0;
 }
 
 window['BPGDecoder'].prototype = {
@@ -40,6 +42,8 @@ bpg_decoder_decode: Module['cwrap']('bpg_decoder_decode', 'number', [ 'number', 
 bpg_decoder_get_info: Module['cwrap']('bpg_decoder_get_info', 'number', [ 'number', 'number' ]),
 
 bpg_decoder_start: Module['cwrap']('bpg_decoder_start', 'number', [ 'number', 'number' ]),
+
+bpg_decoder_get_frame_duration: Module['cwrap']('bpg_decoder_get_frame_duration', 'void', [ 'number', 'number', 'number' ]),
 
 bpg_decoder_get_line: Module['cwrap']('bpg_decoder_get_line', 'number', [ 'number', 'number' ]),
 
@@ -62,8 +66,8 @@ _onload: function(request, event)
 {
     var data = request.response;
     var array = new Uint8Array(data);
-    var img, w, h, img_info_buf, cimg, p0, rgba_line, w4;
-    var heap8, heap32, dst, v, i, y, func;
+    var img, w, h, img_info_buf, cimg, p0, rgba_line, w4, frame_count;
+    var heap8, heap16, heap32, dst, v, i, y, func, duration, frames, loop_count;
 
     //    console.log("loaded " + data.byteLength + " bytes");
 
@@ -74,39 +78,52 @@ _onload: function(request, event)
         return;
     }
     
-    img_info_buf = this.malloc(9 * 4);
+    img_info_buf = this.malloc(5 * 4);
     this.bpg_decoder_get_info(img, img_info_buf);
     /* extract the image info */
+    heap8 = Module['HEAPU8'];
+    heap16 = Module['HEAPU16'];
     heap32 = Module['HEAPU32'];
     w = heap32[img_info_buf >> 2];
     h = heap32[(img_info_buf + 4) >> 2];
-    this.free(img_info_buf);
-
-//    console.log("image " + w + " " + h);
+    loop_count = heap16[(img_info_buf + 16) >> 1];
+    //    console.log("image: w=" + w + " h=" + h + " loop_count=" + loop_count);
     
-    /* select RGBA32 output */
-    this.bpg_decoder_start(img, 1);
-
-    rgba_line = this.malloc(w * 4);
-    cimg = this.ctx.createImageData(w, h);
-    dst = cimg.data;
-    p0 = 0;
-    heap8 = Module['HEAPU8'];
     w4 = w * 4;
-    for(y = 0; y < h; y++) {
-        this.bpg_decoder_get_line(img, rgba_line);
-        for(i = 0; i < w4; i = (i + 1) | 0) {
-            dst[p0] = heap8[(rgba_line + i) | 0] | 0;
-            p0 = (p0 + 1) | 0;
+    rgba_line = this.malloc(w4);
+
+    frame_count = 0;
+    frames = [];
+    for(;;) {
+        /* select RGBA32 output */
+        if (this.bpg_decoder_start(img, 1) < 0)
+            break;
+        this.bpg_decoder_get_frame_duration(img, img_info_buf, 
+                                            img_info_buf + 4);
+        duration = (heap32[img_info_buf >> 2] * 1000) / heap32[(img_info_buf + 4) >> 2];
+
+        cimg = this.ctx.createImageData(w, h);
+        dst = cimg.data;
+        p0 = 0;
+        for(y = 0; y < h; y++) {
+            this.bpg_decoder_get_line(img, rgba_line);
+            for(i = 0; i < w4; i = (i + 1) | 0) {
+                dst[p0] = heap8[(rgba_line + i) | 0] | 0;
+                p0 = (p0 + 1) | 0;
+            }
         }
+        frames[frame_count++] = { 'img': cimg, 'duration': duration };
     }
 
     this.free(rgba_line);
+    this.free(img_info_buf);
 
     this.bpg_decoder_close(img);
 
-    this['imageData'] = cimg;
-    
+    this['loop_count'] = loop_count;
+    this['frames'] = frames;
+    this['imageData'] = frames[0]['img'];
+
     if (this['onload'])
         this['onload']();
 }
@@ -155,13 +172,42 @@ window.onload = function() {
         ctx = canvas.getContext("2d");
         dec = new BPGDecoder(ctx);
         dec.onload = (function(canvas, ctx) {
-            var imageData = this['imageData'];
+            var dec = this;
+            var frames = this['frames'];
+            var imageData = frames[0]['img'];
+            function next_frame() {
+                var frame_index = dec.frame_index;
+                
+                /* compute next frame index */
+                if (++frame_index >= frames.length) {
+                    if (dec['loop_count'] == 0 ||
+                        dec.loop_counter < dec['loop_count']) {
+                        frame_index = 0;
+                        dec.loop_counter++;
+                    } else {
+                        frame_index = -1;
+                    }
+                }
+                if (frame_index >= 0) {
+                    dec.frame_index = frame_index;
+                    ctx.putImageData(frames[frame_index]['img'], 0, 0);
+                    setTimeout(next_frame, frames[frame_index]['duration']);
+                }
+            };
+
             /* resize the canvas to the image size */
             canvas.width = imageData.width;
             canvas.height = imageData.height;
 
             /* draw the image */
             ctx.putImageData(imageData, 0, 0);
+
+            /* if it is an animation, add a timer to display the next frame */
+            if (frames.length > 1) {
+                dec.frame_index = 0;
+                dec.loop_counter = 0;
+                setTimeout(next_frame, frames[0]['duration']);
+            }
         }).bind(dec, canvas, ctx);
         dec.load(url);
     }

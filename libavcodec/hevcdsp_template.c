@@ -544,9 +544,10 @@ static void FUNC(sao_edge_filter_1)(uint8_t *_dst, uint8_t *_src,
 ////////////////////////////////////////////////////////////////////////////////
 //
 ////////////////////////////////////////////////////////////////////////////////
+#ifdef USE_BIPRED
 static void FUNC(put_hevc_pel_pixels)(int16_t *dst,
                                       uint8_t *_src, ptrdiff_t _srcstride,
-                                      int height, intptr_t mx, intptr_t my, int width)
+                                      int height, intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM)
 {
     int x, y;
     pixel *src          = (pixel *)_src;
@@ -559,9 +560,10 @@ static void FUNC(put_hevc_pel_pixels)(int16_t *dst,
         dst += MAX_PB_SIZE;
     }
 }
+#endif
 
 static void FUNC(put_hevc_pel_uni_pixels)(uint8_t *_dst, ptrdiff_t _dststride, uint8_t *_src, ptrdiff_t _srcstride,
-                                          int height, intptr_t mx, intptr_t my, int width)
+                                          int height, intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM)
 {
     int y;
     pixel *src          = (pixel *)_src;
@@ -576,9 +578,10 @@ static void FUNC(put_hevc_pel_uni_pixels)(uint8_t *_dst, ptrdiff_t _dststride, u
     }
 }
 
+#ifdef USE_BIPRED
 static void FUNC(put_hevc_pel_bi_pixels)(uint8_t *_dst, ptrdiff_t _dststride, uint8_t *_src, ptrdiff_t _srcstride,
                                          int16_t *src2,
-                                         int height, intptr_t mx, intptr_t my, int width)
+                                         int height, intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM)
 {
     int x, y;
     pixel *src          = (pixel *)_src;
@@ -587,11 +590,7 @@ static void FUNC(put_hevc_pel_bi_pixels)(uint8_t *_dst, ptrdiff_t _dststride, ui
     ptrdiff_t dststride = _dststride / sizeof(pixel);
 
     int shift = 14  + 1 - BIT_DEPTH;
-#if BIT_DEPTH < 14
-    int offset = 1 << (shift - 1);
-#else
-    int offset = 0;
-#endif
+    int offset = (1 << shift) >> 1;
 
     for (y = 0; y < height; y++) {
         for (x = 0; x < width; x++)
@@ -601,9 +600,10 @@ static void FUNC(put_hevc_pel_bi_pixels)(uint8_t *_dst, ptrdiff_t _dststride, ui
         src2 += MAX_PB_SIZE;
     }
 }
+#endif
 
 static void FUNC(put_hevc_pel_uni_w_pixels)(uint8_t *_dst, ptrdiff_t _dststride, uint8_t *_src, ptrdiff_t _srcstride,
-                                            int height, int denom, int wx, int ox, intptr_t mx, intptr_t my, int width)
+                                            int height, int denom, int wx, int ox, intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM)
 {
     int x, y;
     pixel *src          = (pixel *)_src;
@@ -611,11 +611,7 @@ static void FUNC(put_hevc_pel_uni_w_pixels)(uint8_t *_dst, ptrdiff_t _dststride,
     pixel *dst          = (pixel *)_dst;
     ptrdiff_t dststride = _dststride / sizeof(pixel);
     int shift = denom + 14 - BIT_DEPTH;
-#if BIT_DEPTH < 14
-    int offset = 1 << (shift - 1);
-#else
-    int offset = 0;
-#endif
+    int offset = (1 << shift) >> 1;
 
     ox     = ox * (1 << (BIT_DEPTH - 8));
     for (y = 0; y < height; y++) {
@@ -626,10 +622,11 @@ static void FUNC(put_hevc_pel_uni_w_pixels)(uint8_t *_dst, ptrdiff_t _dststride,
     }
 }
 
+#ifdef USE_BIPRED
 static void FUNC(put_hevc_pel_bi_w_pixels)(uint8_t *_dst, ptrdiff_t _dststride, uint8_t *_src, ptrdiff_t _srcstride,
                                            int16_t *src2,
                                            int height, int denom, int wx0, int wx1,
-                                           int ox0, int ox1, intptr_t mx, intptr_t my, int width)
+                                           int ox0, int ox1, intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM)
 {
     int x, y;
     pixel *src          = (pixel *)_src;
@@ -651,6 +648,7 @@ static void FUNC(put_hevc_pel_bi_w_pixels)(uint8_t *_dst, ptrdiff_t _dststride, 
         src2 += MAX_PB_SIZE;
     }
 }
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 //
@@ -665,9 +663,10 @@ static void FUNC(put_hevc_pel_bi_w_pixels)(uint8_t *_dst, ptrdiff_t _dststride, 
      filter[6] * src[x + 3 * stride] +                                         \
      filter[7] * src[x + 4 * stride])
 
+#ifdef USE_BIPRED
 static void FUNC(put_hevc_qpel_h)(int16_t *dst,
                                   uint8_t *_src, ptrdiff_t _srcstride,
-                                  int height, intptr_t mx, intptr_t my, int width)
+                                  int height, intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM)
 {
     int x, y;
     pixel        *src       = (pixel*)_src;
@@ -683,7 +682,7 @@ static void FUNC(put_hevc_qpel_h)(int16_t *dst,
 
 static void FUNC(put_hevc_qpel_v)(int16_t *dst,
                                   uint8_t *_src, ptrdiff_t _srcstride,
-                                  int height, intptr_t mx, intptr_t my, int width)
+                                  int height, intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM)
 {
     int x, y;
     pixel        *src       = (pixel*)_src;
@@ -701,7 +700,7 @@ static void FUNC(put_hevc_qpel_hv)(int16_t *dst,
                                    uint8_t *_src,
                                    ptrdiff_t _srcstride,
                                    int height, intptr_t mx,
-                                   intptr_t my, int width)
+                                   intptr_t my, int width BIT_DEPTH_PARAM)
 {
     int x, y;
     const int8_t *filter;
@@ -728,10 +727,11 @@ static void FUNC(put_hevc_qpel_hv)(int16_t *dst,
         dst += MAX_PB_SIZE;
     }
 }
+#endif
 
 static void FUNC(put_hevc_qpel_uni_h)(uint8_t *_dst,  ptrdiff_t _dststride,
                                       uint8_t *_src, ptrdiff_t _srcstride,
-                                      int height, intptr_t mx, intptr_t my, int width)
+                                      int height, intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM)
 {
     int x, y;
     pixel        *src       = (pixel*)_src;
@@ -740,12 +740,7 @@ static void FUNC(put_hevc_qpel_uni_h)(uint8_t *_dst,  ptrdiff_t _dststride,
     ptrdiff_t dststride = _dststride / sizeof(pixel);
     const int8_t *filter    = ff_hevc_qpel_filters[mx - 1];
     int shift = 14 - BIT_DEPTH;
-
-#if BIT_DEPTH < 14
-    int offset = 1 << (shift - 1);
-#else
-    int offset = 0;
-#endif
+    int offset = (1 << shift) >> 1;
 
     for (y = 0; y < height; y++) {
         for (x = 0; x < width; x++)
@@ -755,9 +750,10 @@ static void FUNC(put_hevc_qpel_uni_h)(uint8_t *_dst,  ptrdiff_t _dststride,
     }
 }
 
+#ifdef USE_BIPRED
 static void FUNC(put_hevc_qpel_bi_h)(uint8_t *_dst, ptrdiff_t _dststride, uint8_t *_src, ptrdiff_t _srcstride,
                                      int16_t *src2,
-                                     int height, intptr_t mx, intptr_t my, int width)
+                                     int height, intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM)
 {
     int x, y;
     pixel        *src       = (pixel*)_src;
@@ -768,11 +764,7 @@ static void FUNC(put_hevc_qpel_bi_h)(uint8_t *_dst, ptrdiff_t _dststride, uint8_
     const int8_t *filter    = ff_hevc_qpel_filters[mx - 1];
 
     int shift = 14  + 1 - BIT_DEPTH;
-#if BIT_DEPTH < 14
-    int offset = 1 << (shift - 1);
-#else
-    int offset = 0;
-#endif
+    int offset = (1 << shift) >> 1;
 
     for (y = 0; y < height; y++) {
         for (x = 0; x < width; x++)
@@ -782,10 +774,11 @@ static void FUNC(put_hevc_qpel_bi_h)(uint8_t *_dst, ptrdiff_t _dststride, uint8_
         src2 += MAX_PB_SIZE;
     }
 }
+#endif
 
 static void FUNC(put_hevc_qpel_uni_v)(uint8_t *_dst,  ptrdiff_t _dststride,
                                      uint8_t *_src, ptrdiff_t _srcstride,
-                                     int height, intptr_t mx, intptr_t my, int width)
+                                     int height, intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM)
 {
     int x, y;
     pixel        *src       = (pixel*)_src;
@@ -794,12 +787,8 @@ static void FUNC(put_hevc_qpel_uni_v)(uint8_t *_dst,  ptrdiff_t _dststride,
     ptrdiff_t dststride = _dststride / sizeof(pixel);
     const int8_t *filter    = ff_hevc_qpel_filters[my - 1];
     int shift = 14 - BIT_DEPTH;
+    int offset = (1 << shift) >> 1;
 
-#if BIT_DEPTH < 14
-    int offset = 1 << (shift - 1);
-#else
-    int offset = 0;
-#endif
 
     for (y = 0; y < height; y++) {
         for (x = 0; x < width; x++)
@@ -810,9 +799,10 @@ static void FUNC(put_hevc_qpel_uni_v)(uint8_t *_dst,  ptrdiff_t _dststride,
 }
 
 
+#ifdef USE_BIPRED
 static void FUNC(put_hevc_qpel_bi_v)(uint8_t *_dst, ptrdiff_t _dststride, uint8_t *_src, ptrdiff_t _srcstride,
                                      int16_t *src2,
-                                     int height, intptr_t mx, intptr_t my, int width)
+                                     int height, intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM)
 {
     int x, y;
     pixel        *src       = (pixel*)_src;
@@ -823,11 +813,7 @@ static void FUNC(put_hevc_qpel_bi_v)(uint8_t *_dst, ptrdiff_t _dststride, uint8_
     const int8_t *filter    = ff_hevc_qpel_filters[my - 1];
 
     int shift = 14 + 1 - BIT_DEPTH;
-#if BIT_DEPTH < 14
-    int offset = 1 << (shift - 1);
-#else
-    int offset = 0;
-#endif
+    int offset = (1 << shift) >> 1;
 
     for (y = 0; y < height; y++) {
         for (x = 0; x < width; x++)
@@ -837,10 +823,11 @@ static void FUNC(put_hevc_qpel_bi_v)(uint8_t *_dst, ptrdiff_t _dststride, uint8_
         src2 += MAX_PB_SIZE;
     }
 }
+#endif
 
 static void FUNC(put_hevc_qpel_uni_hv)(uint8_t *_dst,  ptrdiff_t _dststride,
                                        uint8_t *_src, ptrdiff_t _srcstride,
-                                       int height, intptr_t mx, intptr_t my, int width)
+                                       int height, intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM)
 {
     int x, y;
     const int8_t *filter;
@@ -851,12 +838,7 @@ static void FUNC(put_hevc_qpel_uni_hv)(uint8_t *_dst,  ptrdiff_t _dststride,
     int16_t tmp_array[(MAX_PB_SIZE + QPEL_EXTRA) * MAX_PB_SIZE];
     int16_t *tmp = tmp_array;
     int shift =  14 - BIT_DEPTH;
-
-#if BIT_DEPTH < 14
-    int offset = 1 << (shift - 1);
-#else
-    int offset = 0;
-#endif
+    int offset = (1 << shift) >> 1;
 
     src   -= QPEL_EXTRA_BEFORE * srcstride;
     filter = ff_hevc_qpel_filters[mx - 1];
@@ -878,9 +860,10 @@ static void FUNC(put_hevc_qpel_uni_hv)(uint8_t *_dst,  ptrdiff_t _dststride,
     }
 }
 
+#ifdef USE_BIPRED
 static void FUNC(put_hevc_qpel_bi_hv)(uint8_t *_dst, ptrdiff_t _dststride, uint8_t *_src, ptrdiff_t _srcstride,
                                       int16_t *src2,
-                                      int height, intptr_t mx, intptr_t my, int width)
+                                      int height, intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM)
 {
     int x, y;
     const int8_t *filter;
@@ -891,11 +874,7 @@ static void FUNC(put_hevc_qpel_bi_hv)(uint8_t *_dst, ptrdiff_t _dststride, uint8
     int16_t tmp_array[(MAX_PB_SIZE + QPEL_EXTRA) * MAX_PB_SIZE];
     int16_t *tmp = tmp_array;
     int shift = 14 + 1 - BIT_DEPTH;
-#if BIT_DEPTH < 14
-    int offset = 1 << (shift - 1);
-#else
-    int offset = 0;
-#endif
+    int offset = (1 << shift) >> 1;
 
     src   -= QPEL_EXTRA_BEFORE * srcstride;
     filter = ff_hevc_qpel_filters[mx - 1];
@@ -917,11 +896,12 @@ static void FUNC(put_hevc_qpel_bi_hv)(uint8_t *_dst, ptrdiff_t _dststride, uint8
         src2 += MAX_PB_SIZE;
     }
 }
+#endif
 
 static void FUNC(put_hevc_qpel_uni_w_h)(uint8_t *_dst,  ptrdiff_t _dststride,
                                         uint8_t *_src, ptrdiff_t _srcstride,
                                         int height, int denom, int wx, int ox,
-                                        intptr_t mx, intptr_t my, int width)
+                                        intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM)
 {
     int x, y;
     pixel        *src       = (pixel*)_src;
@@ -930,11 +910,7 @@ static void FUNC(put_hevc_qpel_uni_w_h)(uint8_t *_dst,  ptrdiff_t _dststride,
     ptrdiff_t dststride = _dststride / sizeof(pixel);
     const int8_t *filter    = ff_hevc_qpel_filters[mx - 1];
     int shift = denom + 14 - BIT_DEPTH;
-#if BIT_DEPTH < 14
-    int offset = 1 << (shift - 1);
-#else
-    int offset = 0;
-#endif
+    int offset = (1 << shift) >> 1;
 
     ox = ox * (1 << (BIT_DEPTH - 8));
     for (y = 0; y < height; y++) {
@@ -945,10 +921,11 @@ static void FUNC(put_hevc_qpel_uni_w_h)(uint8_t *_dst,  ptrdiff_t _dststride,
     }
 }
 
+#ifdef USE_BIPRED
 static void FUNC(put_hevc_qpel_bi_w_h)(uint8_t *_dst, ptrdiff_t _dststride, uint8_t *_src, ptrdiff_t _srcstride,
                                        int16_t *src2,
                                        int height, int denom, int wx0, int wx1,
-                                       int ox0, int ox1, intptr_t mx, intptr_t my, int width)
+                                       int ox0, int ox1, intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM)
 {
     int x, y;
     pixel        *src       = (pixel*)_src;
@@ -972,11 +949,12 @@ static void FUNC(put_hevc_qpel_bi_w_h)(uint8_t *_dst, ptrdiff_t _dststride, uint
         src2 += MAX_PB_SIZE;
     }
 }
+#endif
 
 static void FUNC(put_hevc_qpel_uni_w_v)(uint8_t *_dst,  ptrdiff_t _dststride,
                                         uint8_t *_src, ptrdiff_t _srcstride,
                                         int height, int denom, int wx, int ox,
-                                        intptr_t mx, intptr_t my, int width)
+                                        intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM)
 {
     int x, y;
     pixel        *src       = (pixel*)_src;
@@ -985,11 +963,7 @@ static void FUNC(put_hevc_qpel_uni_w_v)(uint8_t *_dst,  ptrdiff_t _dststride,
     ptrdiff_t dststride = _dststride / sizeof(pixel);
     const int8_t *filter    = ff_hevc_qpel_filters[my - 1];
     int shift = denom + 14 - BIT_DEPTH;
-#if BIT_DEPTH < 14
-    int offset = 1 << (shift - 1);
-#else
-    int offset = 0;
-#endif
+    int offset = (1 << shift) >> 1;
 
     ox = ox * (1 << (BIT_DEPTH - 8));
     for (y = 0; y < height; y++) {
@@ -1000,10 +974,11 @@ static void FUNC(put_hevc_qpel_uni_w_v)(uint8_t *_dst,  ptrdiff_t _dststride,
     }
 }
 
+#ifdef USE_BIPRED
 static void FUNC(put_hevc_qpel_bi_w_v)(uint8_t *_dst, ptrdiff_t _dststride, uint8_t *_src, ptrdiff_t _srcstride,
                                        int16_t *src2,
                                        int height, int denom, int wx0, int wx1,
-                                       int ox0, int ox1, intptr_t mx, intptr_t my, int width)
+                                       int ox0, int ox1, intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM)
 {
     int x, y;
     pixel        *src       = (pixel*)_src;
@@ -1027,11 +1002,12 @@ static void FUNC(put_hevc_qpel_bi_w_v)(uint8_t *_dst, ptrdiff_t _dststride, uint
         src2 += MAX_PB_SIZE;
     }
 }
+#endif
 
 static void FUNC(put_hevc_qpel_uni_w_hv)(uint8_t *_dst,  ptrdiff_t _dststride,
                                          uint8_t *_src, ptrdiff_t _srcstride,
                                          int height, int denom, int wx, int ox,
-                                         intptr_t mx, intptr_t my, int width)
+                                         intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM)
 {
     int x, y;
     const int8_t *filter;
@@ -1042,11 +1018,7 @@ static void FUNC(put_hevc_qpel_uni_w_hv)(uint8_t *_dst,  ptrdiff_t _dststride,
     int16_t tmp_array[(MAX_PB_SIZE + QPEL_EXTRA) * MAX_PB_SIZE];
     int16_t *tmp = tmp_array;
     int shift = denom + 14 - BIT_DEPTH;
-#if BIT_DEPTH < 14
-    int offset = 1 << (shift - 1);
-#else
-    int offset = 0;
-#endif
+    int offset = (1 << shift) >> 1;
 
     src   -= QPEL_EXTRA_BEFORE * srcstride;
     filter = ff_hevc_qpel_filters[mx - 1];
@@ -1069,10 +1041,11 @@ static void FUNC(put_hevc_qpel_uni_w_hv)(uint8_t *_dst,  ptrdiff_t _dststride,
     }
 }
 
+#ifdef USE_BIPRED
 static void FUNC(put_hevc_qpel_bi_w_hv)(uint8_t *_dst, ptrdiff_t _dststride, uint8_t *_src, ptrdiff_t _srcstride,
                                         int16_t *src2,
                                         int height, int denom, int wx0, int wx1,
-                                        int ox0, int ox1, intptr_t mx, intptr_t my, int width)
+                                        int ox0, int ox1, intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM)
 {
     int x, y;
     const int8_t *filter;
@@ -1108,6 +1081,7 @@ static void FUNC(put_hevc_qpel_bi_w_hv)(uint8_t *_dst, ptrdiff_t _dststride, uin
         src2 += MAX_PB_SIZE;
     }
 }
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 //
@@ -1118,9 +1092,10 @@ static void FUNC(put_hevc_qpel_bi_w_hv)(uint8_t *_dst, ptrdiff_t _dststride, uin
      filter[2] * src[x + stride] +                                             \
      filter[3] * src[x + 2 * stride])
 
+#ifdef USE_BIPRED
 static void FUNC(put_hevc_epel_h)(int16_t *dst,
                                   uint8_t *_src, ptrdiff_t _srcstride,
-                                  int height, intptr_t mx, intptr_t my, int width)
+                                  int height, intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM)
 {
     int x, y;
     pixel *src = (pixel *)_src;
@@ -1136,7 +1111,7 @@ static void FUNC(put_hevc_epel_h)(int16_t *dst,
 
 static void FUNC(put_hevc_epel_v)(int16_t *dst,
                                   uint8_t *_src, ptrdiff_t _srcstride,
-                                  int height, intptr_t mx, intptr_t my, int width)
+                                  int height, intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM)
 {
     int x, y;
     pixel *src = (pixel *)_src;
@@ -1153,7 +1128,7 @@ static void FUNC(put_hevc_epel_v)(int16_t *dst,
 
 static void FUNC(put_hevc_epel_hv)(int16_t *dst,
                                    uint8_t *_src, ptrdiff_t _srcstride,
-                                   int height, intptr_t mx, intptr_t my, int width)
+                                   int height, intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM)
 {
     int x, y;
     pixel *src = (pixel *)_src;
@@ -1181,9 +1156,10 @@ static void FUNC(put_hevc_epel_hv)(int16_t *dst,
         dst += MAX_PB_SIZE;
     }
 }
+#endif
 
 static void FUNC(put_hevc_epel_uni_h)(uint8_t *_dst, ptrdiff_t _dststride, uint8_t *_src, ptrdiff_t _srcstride,
-                                      int height, intptr_t mx, intptr_t my, int width)
+                                      int height, intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM)
 {
     int x, y;
     pixel *src = (pixel *)_src;
@@ -1192,11 +1168,7 @@ static void FUNC(put_hevc_epel_uni_h)(uint8_t *_dst, ptrdiff_t _dststride, uint8
     ptrdiff_t dststride = _dststride / sizeof(pixel);
     const int8_t *filter = ff_hevc_epel_filters[mx - 1];
     int shift = 14 - BIT_DEPTH;
-#if BIT_DEPTH < 14
-    int offset = 1 << (shift - 1);
-#else
-    int offset = 0;
-#endif
+    int offset = (1 << shift) >> 1;
 
     for (y = 0; y < height; y++) {
         for (x = 0; x < width; x++)
@@ -1206,9 +1178,10 @@ static void FUNC(put_hevc_epel_uni_h)(uint8_t *_dst, ptrdiff_t _dststride, uint8
     }
 }
 
+#ifdef USE_BIPRED
 static void FUNC(put_hevc_epel_bi_h)(uint8_t *_dst, ptrdiff_t _dststride, uint8_t *_src, ptrdiff_t _srcstride,
                                      int16_t *src2,
-                                     int height, intptr_t mx, intptr_t my, int width)
+                                     int height, intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM)
 {
     int x, y;
     pixel *src = (pixel *)_src;
@@ -1217,11 +1190,7 @@ static void FUNC(put_hevc_epel_bi_h)(uint8_t *_dst, ptrdiff_t _dststride, uint8_
     ptrdiff_t dststride = _dststride / sizeof(pixel);
     const int8_t *filter = ff_hevc_epel_filters[mx - 1];
     int shift = 14 + 1 - BIT_DEPTH;
-#if BIT_DEPTH < 14
-    int offset = 1 << (shift - 1);
-#else
-    int offset = 0;
-#endif
+    int offset = (1 << shift) >> 1;
 
     for (y = 0; y < height; y++) {
         for (x = 0; x < width; x++) {
@@ -1232,9 +1201,10 @@ static void FUNC(put_hevc_epel_bi_h)(uint8_t *_dst, ptrdiff_t _dststride, uint8_
         src2 += MAX_PB_SIZE;
     }
 }
+#endif
 
 static void FUNC(put_hevc_epel_uni_v)(uint8_t *_dst, ptrdiff_t _dststride, uint8_t *_src, ptrdiff_t _srcstride,
-                                      int height, intptr_t mx, intptr_t my, int width)
+                                      int height, intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM)
 {
     int x, y;
     pixel *src = (pixel *)_src;
@@ -1243,11 +1213,7 @@ static void FUNC(put_hevc_epel_uni_v)(uint8_t *_dst, ptrdiff_t _dststride, uint8
     ptrdiff_t dststride = _dststride / sizeof(pixel);
     const int8_t *filter = ff_hevc_epel_filters[my - 1];
     int shift = 14 - BIT_DEPTH;
-#if BIT_DEPTH < 14
-    int offset = 1 << (shift - 1);
-#else
-    int offset = 0;
-#endif
+    int offset = (1 << shift) >> 1;
 
     for (y = 0; y < height; y++) {
         for (x = 0; x < width; x++)
@@ -1257,9 +1223,10 @@ static void FUNC(put_hevc_epel_uni_v)(uint8_t *_dst, ptrdiff_t _dststride, uint8
     }
 }
 
+#ifdef USE_BIPRED
 static void FUNC(put_hevc_epel_bi_v)(uint8_t *_dst, ptrdiff_t _dststride, uint8_t *_src, ptrdiff_t _srcstride,
                                      int16_t *src2,
-                                     int height, intptr_t mx, intptr_t my, int width)
+                                     int height, intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM)
 {
     int x, y;
     pixel *src = (pixel *)_src;
@@ -1268,11 +1235,7 @@ static void FUNC(put_hevc_epel_bi_v)(uint8_t *_dst, ptrdiff_t _dststride, uint8_
     pixel *dst          = (pixel *)_dst;
     ptrdiff_t dststride = _dststride / sizeof(pixel);
     int shift = 14 + 1 - BIT_DEPTH;
-#if BIT_DEPTH < 14
-    int offset = 1 << (shift - 1);
-#else
-    int offset = 0;
-#endif
+    int offset = (1 << shift) >> 1;
 
     for (y = 0; y < height; y++) {
         for (x = 0; x < width; x++)
@@ -1282,9 +1245,10 @@ static void FUNC(put_hevc_epel_bi_v)(uint8_t *_dst, ptrdiff_t _dststride, uint8_
         src2 += MAX_PB_SIZE;
     }
 }
+#endif
 
 static void FUNC(put_hevc_epel_uni_hv)(uint8_t *_dst, ptrdiff_t _dststride, uint8_t *_src, ptrdiff_t _srcstride,
-                                       int height, intptr_t mx, intptr_t my, int width)
+                                       int height, intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM)
 {
     int x, y;
     pixel *src = (pixel *)_src;
@@ -1295,11 +1259,7 @@ static void FUNC(put_hevc_epel_uni_hv)(uint8_t *_dst, ptrdiff_t _dststride, uint
     int16_t tmp_array[(MAX_PB_SIZE + EPEL_EXTRA) * MAX_PB_SIZE];
     int16_t *tmp = tmp_array;
     int shift = 14 - BIT_DEPTH;
-#if BIT_DEPTH < 14
-    int offset = 1 << (shift - 1);
-#else
-    int offset = 0;
-#endif
+    int offset = (1 << shift) >> 1;
 
     src -= EPEL_EXTRA_BEFORE * srcstride;
 
@@ -1321,9 +1281,10 @@ static void FUNC(put_hevc_epel_uni_hv)(uint8_t *_dst, ptrdiff_t _dststride, uint
     }
 }
 
+#ifdef USE_BIPRED
 static void FUNC(put_hevc_epel_bi_hv)(uint8_t *_dst, ptrdiff_t _dststride, uint8_t *_src, ptrdiff_t _srcstride,
                                       int16_t *src2,
-                                      int height, intptr_t mx, intptr_t my, int width)
+                                      int height, intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM)
 {
     int x, y;
     pixel *src = (pixel *)_src;
@@ -1334,11 +1295,7 @@ static void FUNC(put_hevc_epel_bi_hv)(uint8_t *_dst, ptrdiff_t _dststride, uint8
     int16_t tmp_array[(MAX_PB_SIZE + EPEL_EXTRA) * MAX_PB_SIZE];
     int16_t *tmp = tmp_array;
     int shift = 14 + 1 - BIT_DEPTH;
-#if BIT_DEPTH < 14
-    int offset = 1 << (shift - 1);
-#else
-    int offset = 0;
-#endif
+    int offset = (1 << shift) >> 1;
 
     src -= EPEL_EXTRA_BEFORE * srcstride;
 
@@ -1360,9 +1317,10 @@ static void FUNC(put_hevc_epel_bi_hv)(uint8_t *_dst, ptrdiff_t _dststride, uint8
         src2 += MAX_PB_SIZE;
     }
 }
+#endif
 
 static void FUNC(put_hevc_epel_uni_w_h)(uint8_t *_dst, ptrdiff_t _dststride, uint8_t *_src, ptrdiff_t _srcstride,
-                                        int height, int denom, int wx, int ox, intptr_t mx, intptr_t my, int width)
+                                        int height, int denom, int wx, int ox, intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM)
 {
     int x, y;
     pixel *src = (pixel *)_src;
@@ -1371,11 +1329,7 @@ static void FUNC(put_hevc_epel_uni_w_h)(uint8_t *_dst, ptrdiff_t _dststride, uin
     ptrdiff_t dststride = _dststride / sizeof(pixel);
     const int8_t *filter = ff_hevc_epel_filters[mx - 1];
     int shift = denom + 14 - BIT_DEPTH;
-#if BIT_DEPTH < 14
-    int offset = 1 << (shift - 1);
-#else
-    int offset = 0;
-#endif
+    int offset = (1 << shift) >> 1;
 
     ox     = ox * (1 << (BIT_DEPTH - 8));
     for (y = 0; y < height; y++) {
@@ -1387,10 +1341,11 @@ static void FUNC(put_hevc_epel_uni_w_h)(uint8_t *_dst, ptrdiff_t _dststride, uin
     }
 }
 
+#ifdef USE_BIPRED
 static void FUNC(put_hevc_epel_bi_w_h)(uint8_t *_dst, ptrdiff_t _dststride, uint8_t *_src, ptrdiff_t _srcstride,
                                        int16_t *src2,
                                        int height, int denom, int wx0, int wx1,
-                                       int ox0, int ox1, intptr_t mx, intptr_t my, int width)
+                                       int ox0, int ox1, intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM)
 {
     int x, y;
     pixel *src = (pixel *)_src;
@@ -1412,9 +1367,10 @@ static void FUNC(put_hevc_epel_bi_w_h)(uint8_t *_dst, ptrdiff_t _dststride, uint
         src2 += MAX_PB_SIZE;
     }
 }
+#endif
 
 static void FUNC(put_hevc_epel_uni_w_v)(uint8_t *_dst, ptrdiff_t _dststride, uint8_t *_src, ptrdiff_t _srcstride,
-                                        int height, int denom, int wx, int ox, intptr_t mx, intptr_t my, int width)
+                                        int height, int denom, int wx, int ox, intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM)
 {
     int x, y;
     pixel *src = (pixel *)_src;
@@ -1423,11 +1379,7 @@ static void FUNC(put_hevc_epel_uni_w_v)(uint8_t *_dst, ptrdiff_t _dststride, uin
     ptrdiff_t dststride = _dststride / sizeof(pixel);
     const int8_t *filter = ff_hevc_epel_filters[my - 1];
     int shift = denom + 14 - BIT_DEPTH;
-#if BIT_DEPTH < 14
-    int offset = 1 << (shift - 1);
-#else
-    int offset = 0;
-#endif
+    int offset = (1 << shift) >> 1;
 
     ox     = ox * (1 << (BIT_DEPTH - 8));
     for (y = 0; y < height; y++) {
@@ -1439,10 +1391,11 @@ static void FUNC(put_hevc_epel_uni_w_v)(uint8_t *_dst, ptrdiff_t _dststride, uin
     }
 }
 
+#ifdef USE_BIPRED
 static void FUNC(put_hevc_epel_bi_w_v)(uint8_t *_dst, ptrdiff_t _dststride, uint8_t *_src, ptrdiff_t _srcstride,
                                        int16_t *src2,
                                        int height, int denom, int wx0, int wx1,
-                                       int ox0, int ox1, intptr_t mx, intptr_t my, int width)
+                                       int ox0, int ox1, intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM)
 {
     int x, y;
     pixel *src = (pixel *)_src;
@@ -1464,9 +1417,10 @@ static void FUNC(put_hevc_epel_bi_w_v)(uint8_t *_dst, ptrdiff_t _dststride, uint
         src2 += MAX_PB_SIZE;
     }
 }
+#endif
 
 static void FUNC(put_hevc_epel_uni_w_hv)(uint8_t *_dst, ptrdiff_t _dststride, uint8_t *_src, ptrdiff_t _srcstride,
-                                         int height, int denom, int wx, int ox, intptr_t mx, intptr_t my, int width)
+                                         int height, int denom, int wx, int ox, intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM)
 {
     int x, y;
     pixel *src = (pixel *)_src;
@@ -1477,11 +1431,7 @@ static void FUNC(put_hevc_epel_uni_w_hv)(uint8_t *_dst, ptrdiff_t _dststride, ui
     int16_t tmp_array[(MAX_PB_SIZE + EPEL_EXTRA) * MAX_PB_SIZE];
     int16_t *tmp = tmp_array;
     int shift = denom + 14 - BIT_DEPTH;
-#if BIT_DEPTH < 14
-    int offset = 1 << (shift - 1);
-#else
-    int offset = 0;
-#endif
+    int offset = (1 << shift) >> 1;
 
     src -= EPEL_EXTRA_BEFORE * srcstride;
 
@@ -1504,10 +1454,11 @@ static void FUNC(put_hevc_epel_uni_w_hv)(uint8_t *_dst, ptrdiff_t _dststride, ui
     }
 }
 
+#ifdef USE_BIPRED
 static void FUNC(put_hevc_epel_bi_w_hv)(uint8_t *_dst, ptrdiff_t _dststride, uint8_t *_src, ptrdiff_t _srcstride,
                                         int16_t *src2,
                                         int height, int denom, int wx0, int wx1,
-                                        int ox0, int ox1, intptr_t mx, intptr_t my, int width)
+                                        int ox0, int ox1, intptr_t mx, intptr_t my, int width BIT_DEPTH_PARAM)
 {
     int x, y;
     pixel *src = (pixel *)_src;
@@ -1544,6 +1495,8 @@ static void FUNC(put_hevc_epel_bi_w_hv)(uint8_t *_dst, ptrdiff_t _dststride, uin
     }
 }// line zero
 #endif
+
+#endif /* USE_PRED */
 
 
 #define P3 pix[-4 * xstride]

@@ -31,27 +31,31 @@
 
 #include "x265.h"
 
-int x265_encode_picture(uint8_t **pbuf, Image *img, 
-                        const HEVCEncodeParams *params)
-{
+struct HEVCEncoderContext {
     x265_encoder *enc;
-    x265_param *p;
-    x265_picture *pic, *pic_in;
-    x265_nal *p_nal;
-    int buf_len, idx, c_count, i, ret, pic_count;
-    uint32_t nal_count;
+    x265_picture *pic;
     uint8_t *buf;
+    int buf_len, buf_size;
+};
+
+static HEVCEncoderContext *x265_open(const HEVCEncodeParams *params)
+{
+    HEVCEncoderContext *s;
+    x265_param *p;
     int preset_index;
     const char *preset;
 
-    if (img->bit_depth != x265_max_bit_depth) {
+    s = malloc(sizeof(HEVCEncoderContext));
+    memset(s, 0, sizeof(*s));
+
+    if (params->bit_depth != x265_max_bit_depth) {
         fprintf(stderr, "x265 is compiled to support only %d bit depth. Use the '-b %d' option to force the bit depth.\n",
                 x265_max_bit_depth, x265_max_bit_depth);
-        return -1;
+        return NULL;
     }
-    if (img->format == BPG_FORMAT_GRAY) {
+    if (params->chroma_format == BPG_FORMAT_GRAY) {
         fprintf(stderr, "x265 does not support monochrome (or alpha) data yet. Plase use the jctvc encoder.\n");
-        return -1;
+        return NULL;
     }
 
     p = x265_param_alloc();
@@ -66,9 +70,9 @@ int x265_encode_picture(uint8_t **pbuf, Image *img,
 
     p->bRepeatHeaders = 1;
     p->decodedPictureHashSEI = params->sei_decoded_picture_hash;
-    p->sourceWidth = img->w;
-    p->sourceHeight = img->h;
-    switch(img->format) {
+    p->sourceWidth = params->width;
+    p->sourceHeight = params->height;
+    switch(params->chroma_format) {
     case BPG_FORMAT_GRAY:
         p->internalCsp = X265_CSP_I400;
         break;
@@ -84,8 +88,18 @@ int x265_encode_picture(uint8_t **pbuf, Image *img,
     default:
         abort();
     }
-    p->keyframeMax = 1; /* only I frames */
-    p->internalBitDepth = img->bit_depth;
+    if (params->intra_only) {
+        p->keyframeMax = 1; /* only I frames */
+        p->totalFrames = 1;
+    } else {
+        p->keyframeMax = 250;
+        p->totalFrames = 0;
+        p->maxNumReferences = 1;
+        p->bframes = 0;
+    }
+    p->bEnableRectInter = 1;
+    p->bEnableAMP = 1; /* cannot use 0 due to header restriction */
+    p->internalBitDepth = params->bit_depth;
     p->bEmitInfoSEI = 0;
     if (params->verbose)
         p->logLevel = X265_LOG_INFO;
@@ -95,20 +109,51 @@ int x265_encode_picture(uint8_t **pbuf, Image *img,
     /* dummy frame rate */
     p->fpsNum = 25;
     p->fpsDenom = 1;
-    p->totalFrames = 1;
 
     p->rc.rateControlMode = X265_RC_CQP;
     /* XXX: why do we need this offset to match the JCTVC quality ? */
-    if (img->bit_depth == 10)
+    if (params->bit_depth == 10)
         p->rc.qp = params->qp + 7;
     else
         p->rc.qp = params->qp + 1;
     p->bLossless = params->lossless;
 
-    enc = x265_encoder_open(p);
+    s->enc = x265_encoder_open(p);
 
-    pic = x265_picture_alloc();
-    x265_picture_init(p, pic);
+    s->pic = x265_picture_alloc();
+    x265_picture_init(p, s->pic);
+
+    s->pic->colorSpace = p->internalCsp;
+
+    x265_param_free(p);
+
+    return s;
+}
+
+static void add_nal(HEVCEncoderContext *s, const uint8_t *data, int data_len)
+{
+    int new_size, size;
+
+    size = s->buf_len + data_len;
+    if (size > s->buf_size) {
+        new_size = (s->buf_size * 3) / 2;
+        if (new_size < size)
+            new_size = size;
+        s->buf = realloc(s->buf, new_size);
+        s->buf_size = new_size;
+    }
+    memcpy(s->buf + s->buf_len, data, data_len);
+    s->buf_len += data_len;
+}
+
+static int x265_encode(HEVCEncoderContext *s, Image *img)
+{
+    int c_count, i, ret;
+    x265_picture *pic;
+    uint32_t nal_count;
+    x265_nal *p_nal;
+    
+    pic = s->pic;
 
     if (img->format == BPG_FORMAT_GRAY)
         c_count = 1;
@@ -119,48 +164,47 @@ int x265_encode_picture(uint8_t **pbuf, Image *img,
         pic->stride[i] = img->linesize[i];
     }
     pic->bitDepth = img->bit_depth;
-    pic->colorSpace = p->internalCsp;
 
-    pic_count = 0;
-    for(;;) {
-        if (pic_count == 0)
-            pic_in = pic;
-        else
-            pic_in = NULL;
-        ret = x265_encoder_encode(enc, &p_nal, &nal_count, pic_in, NULL);
-        if (ret < 0)
-            goto fail;
-        if (ret == 1)
-            break;
-        pic_count++;
+    ret = x265_encoder_encode(s->enc, &p_nal, &nal_count, pic, NULL);
+    if (ret > 0) {
+        for(i = 0; i < nal_count; i++) {
+            add_nal(s, p_nal[i].payload, p_nal[i].sizeBytes);
+        }
     }
-
-    buf_len = 0;
-    for(i = 0; i < nal_count; i++) {
-        buf_len += p_nal[i].sizeBytes;
-    }
-    //    printf("nal_count=%d buf_len=%d\n", nal_count, buf_len);
-    
-    buf = malloc(buf_len);
-    idx = 0;
-    for(i = 0; i < nal_count; i++) {
-        memcpy(buf + idx, p_nal[i].payload, p_nal[i].sizeBytes);
-        idx += p_nal[i].sizeBytes;
-    }
-    
-    x265_encoder_close(enc);
-
-    x265_param_free(p);
-    
-    x265_picture_free(pic);
-
-    *pbuf = buf;
-    return buf_len;
- fail:
-    x265_encoder_close(enc);
-    
-    x265_param_free(p);
-    x265_picture_free(pic);
-    *pbuf = NULL;
-    return -1;
+    return 0;
 }
+
+static int x265_close(HEVCEncoderContext *s, uint8_t **pbuf)
+{
+    int buf_len, ret, i;
+    uint32_t nal_count;
+    x265_nal *p_nal;
+    
+    /* get last compressed pictures */
+    for(;;) {
+        ret = x265_encoder_encode(s->enc, &p_nal, &nal_count, NULL, NULL);
+        if (ret <= 0)
+            break;
+        for(i = 0; i < nal_count; i++) {
+            add_nal(s, p_nal[i].payload, p_nal[i].sizeBytes);
+        }
+    }
+
+    if (s->buf_len < s->buf_size) {
+        s->buf = realloc(s->buf, s->buf_len);
+    }
+
+    *pbuf = s->buf;
+    buf_len = s->buf_len;
+
+    x265_encoder_close(s->enc);
+    x265_picture_free(s->pic);
+    free(s);
+    return buf_len;
+}
+
+HEVCEncoder x265_hevc_encoder = {
+  .open = x265_open,
+  .encode = x265_encode,
+  .close = x265_close,
+};

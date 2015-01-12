@@ -1,5 +1,5 @@
-BPG Image Encoder and Decoder
------------------------------
+BPG Image library and utilities
+-------------------------------
 
 1) Quick introduction
 ---------------------
@@ -13,6 +13,9 @@ BPG Image Encoder and Decoder
   in the Makefile. x265 supports by default only 8 bits per component
   and does not support monochrome encoding yet (hence no alpha nor
   grayscale images can be encoded with it).
+
+- bpgview: in order to compile it you need to install the SDL and
+  SDL_image libraries.
 
 - Emscripten usage: in order to generate the Javascript decoder, you
   must install Emscripten and enable its use in the Makefile.
@@ -72,8 +75,7 @@ as input.
     * For JPEG input, the color space of the input image is not
       modified (it is YCbCr, RGB, YCbCrK or CMYK). The chroma is
       subsampled according to the preferred chroma format ('-f'
-      option). Images with vertically subsampled chroma are currently
-      not supported.
+      option).
 
     * For PNG input, the input image is converted to the preferred
       color space ('-c' option). Its chroma is then subsampled
@@ -86,6 +88,38 @@ as input.
   ('-premul' option) usually gives a better compression at the expense
   of a loss in the color components. This loss is not an issue if the
   image is not edited.
+
+- Animations: with the '-a' option, animations can be encoded from a
+  sequence of PNG or JPEG images, indexed from 1 or 0. For example:
+
+  ./bpgenc -a anim%2d.png -fps 25 -loop 0 -o anim.bpg
+
+  generates an animation from anim01.png, anim02.png, etc... The frame
+  rate is specified with '-fps' and the number of loops with '-loop'
+  (0 = infinite). If a different delay per image is needed as in some
+  animated GIFs, a text file can be specified with the '-delayfile'
+  option. It contains one number per image giving its duration in
+  centiseconds. All durations are rounded to a multiple of '1/fps', so
+  it is important to set a consistent frame rate.
+  
+  The necessary frames and delay file can be generated from animated
+  GIFs with the ImageMagick tools:
+  
+  convert -coalesce anim.gif anim%d.png
+ 
+  identify -format "%T\n" anim.gif > anim.txt
+  
+  In order to reduce the file size, the frame rate can be choosen so
+  that most frames have a frame period of 1 (hence if anim.txt
+  contains only frame durations of 5 centiseconds, then choose a frame
+  rate of 20 frames/s).
+
+  As GIFs use paletted colors and 1 bit transparency, it is always
+  better to start from the source material (e.g. PNG files) to have
+  the best quality.
+
+  A BPG decoder not supporting animations only displays the first
+  frame.
 
 - By default, bpgenc does not copy the metadata. You can copy them
   with the '-keepmetadata' option. For JPEG input, EXIF, ICCP and XMP
@@ -107,7 +141,15 @@ no decoded image is output).
 - The '-b' option selects the bit depth (8 or 16) of the PNG
   output. It is independent of the internal BPG bit depth.
 
-4) BPG decoding library
+4) BPG viewer
+-------------
+
+The BPG image viewer uses the SDL library to display BPG images and
+other image formats supported by the SDL_image library. The available
+keys are displayed by launching bpgview without parameters. bpgview
+supports BPG animations.
+
+5) BPG decoding library
 -----------------------
 
 BPG images can be decoded in any program with the libbpg
@@ -119,13 +161,19 @@ provided as a static one.
 Currently there is no similar library for encoding so you should
 invoke the bpgenc utility.
 
-5) Javascript decoder
+6) Javascript decoder
 ---------------------
 
-bpgdec.js is a Javascript decoder supporting the BPG file
-format. bpgdec8b.js is a specialized version limited to BPG images
-using 8 bits per component. It is a little faster and consumes less
-memory (16 MB instead of 32 MB by default, you can change the memory
+The following Javascript decoders are available, sorted by increasing size:
+
+             > 8 bits   animations
+bpgdec8.js   no         no
+bpgdec.js    yes        no
+bpgdec8a.js  no         yes
+
+
+The 8 bit only decoders are a little faster and consumes less memory
+(16 MB instead of 32 MB by default, you can change the memory
 configuration in the Makefile if you want to handle larger images).
 
 The Javascript decoder substitutes all the <img> tags with a source
@@ -138,10 +186,14 @@ The image data is downloaded with the XMLHttpRequest object. So the
 BPG images and the BPG Javascript decoder must be in the same domain
 unless Cross-Origin Resource Sharing is used.
 
+When animations are displayed, all the frames are stored in memory, so
+animations with a large number of frames and large resolutions should
+be avoided, as with animated GIFs.
+
 asm.js gives an interesting speed boost, so we hope that more browsers
 will support this Javascript subset.
 
-6) FFmpeg modifications
+7) FFmpeg modifications
 -----------------------
 
 - Completed support of chroma_format_idc = 0 (monochrome mode).
@@ -156,7 +208,7 @@ will support this Javascript subset.
   14 are supported without code duplication but slower decoding.
 
 - Added a modified SPS header to reduce the size of the BPG decoder
-  (the solution instead is to generate standard VPS and SPS headers
+  (an alternate solution is to generate standard VPS and SPS headers
   from the BPG header).
 
 - Added defines to keep only the HEVC intra code and suppress the
@@ -165,10 +217,10 @@ will support this Javascript subset.
 - Stripped FFmpeg from all codecs except HEVC and the necessary
   support code.
 
-7) Licensing
+8) Licensing
 ------------
 
-- libbpg and bpgenc are released under the LGPL license (the FFmpeg
+- libbpg and bpgdec are released under the LGPL license (the FFmpeg
   part is under the LGPL, the BPG specific part is released under the
   BSD license).
 

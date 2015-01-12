@@ -112,7 +112,7 @@ static const AVPixFmtDescriptorEntry pix_desc[] = {
         }
     },
     {
-        AV_PIX_FMT_YUV422P16LE,
+        AV_PIX_FMT_YUV422P,
         {
             //.name = "yuv422p",
             .nb_components = 3,

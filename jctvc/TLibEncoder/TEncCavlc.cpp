@@ -42,6 +42,8 @@
 //! \ingroup TLibEncoder
 //! \{
 
+#define SRPS_IN_SLICE 1
+
 #if ENC_DEC_TRACE
 
 Void  xTraceSPSHeader (TComSPS *pSPS)
@@ -545,16 +547,16 @@ Void TEncCavlc::codeSPS( TComSPS* pcSPS )
   TComRPSList* rpsList = pcSPS->getRPSList();
   TComReferencePictureSet*      rps;
 
-  if (1) {
+#if SRPS_IN_SLICE
     WRITE_UVLC(0, "num_short_term_ref_pic_sets" );
-  } else {
+#else
     WRITE_UVLC(rpsList->getNumberOfReferencePictureSets(), "num_short_term_ref_pic_sets" );
     for(Int i=0; i < rpsList->getNumberOfReferencePictureSets(); i++)
       {
         rps = rpsList->getReferencePictureSet(i);
         codeShortTermRefPicSet(pcSPS,rps,false, i);
       }
-  }
+#endif
   WRITE_FLAG( pcSPS->getLongTermRefsPresent() ? 1 : 0,         "long_term_ref_pics_present_flag" );
   if (pcSPS->getLongTermRefsPresent())
   {
@@ -776,6 +778,12 @@ Void TEncCavlc::codeSliceHeader         ( TComSlice* pcSlice )
         }
       }
 
+#if SRPS_IN_SLICE
+      {
+        WRITE_FLAG( 0, "short_term_ref_pic_set_sps_flag");
+        codeShortTermRefPicSet(pcSlice->getSPS(), rps, true, 0);
+      }
+#else
       if(pcSlice->getRPSidx() < 0)
       {
         WRITE_FLAG( 0, "short_term_ref_pic_set_sps_flag");
@@ -794,6 +802,7 @@ Void TEncCavlc::codeSliceHeader         ( TComSlice* pcSlice )
           WRITE_CODE( pcSlice->getRPSidx(), numBits, "short_term_ref_pic_set_idx" );
         }
       }
+#endif
       if(pcSlice->getSPS()->getLongTermRefsPresent())
       {
         Int numLtrpInSH = rps->getNumberOfLongtermPictures();

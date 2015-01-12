@@ -1,8 +1,8 @@
 BPG Specification
 
-version 0.9.4
+version 0.9.5
 
-Copyright (c) 2014 Fabrice Bellard
+Copyright (c) 2014-2015 Fabrice Bellard
 
 1) Introduction
 ---------------
@@ -25,6 +25,9 @@ Progressive decoding and display is supported by interleaving the
 alpha and color data.
 
 Arbitrary metadata (such as EXIF, ICC profile, XMP) are supported.
+
+Animations are supported as an optional feature. Decoders not
+supporting animation display the first frame of the animation.
 
 2) Bitstream conventions
 ------------------------
@@ -69,7 +72,7 @@ heic_file() {
      extension_present_flag                                      u(1)
      alpha2_flag                                                 u(1)
      limited_range_flag                                          u(1)
-     reserved_zero                                               u(1)
+     animation_flag                                              u(1)
      
      picture_width                                               ue7(32)
      picture_height                                              ue7(32)
@@ -90,12 +93,26 @@ extension_data()
      while (more_bytes()) {
          extension_tag                                           ue7(32)
          extension_tag_length                                    ue7(32)
-         for(j = 0; j < extension_tag_length; j++) {
-             extension_tag_data_byte                             b(8)
+         if (extension_tag == 5) {
+             animation_control_extension(extension_tag_length)
+         } else {
+             for(j = 0; j < extension_tag_length; j++) {
+                 extension_tag_data_byte                         b(8)
+             }
          }
      }
 }
-     
+
+animation_control_extension(payload_length)
+{
+    loop_count                                                   ue7(16)
+    frame_period_num                                             ue7(16)
+    frame_period_den                                             ue7(16)
+    while (more_bytes()) {
+        dummy_byte                                               b(8)
+    }
+}
+
 hevc_header_and_data()
 {
      if (alpha1_flag || alpha2_flag) {
@@ -148,7 +165,11 @@ hevc_data()
          hevc_data_byte                                          b(8)
      }
 }
-        
+
+frame_duration_sei(payloadSize)
+{
+     frame_duration                                              u(16)
+}
 
 3.2) Semantics
 --------------
@@ -166,9 +187,6 @@ hevc_data()
 
        The other values are reserved.
        
-       The chroma samples in the 4:2:0 and 4:2:2 formats are sampled
-       at the same position as JPEG [2].
-
      'alpha1_flag' and 'alpha2_flag' give information about the alpha plane:
 
        alpha1_flag=0 alpha2_flag=0: no alpha plane.
@@ -243,7 +261,11 @@ hevc_data()
 
      The alpha (or W) plane always uses the full range.
 
-     'reserved_zero' must be 0 in this version.
+     'animation_flag'. The value '1' indicates that more than one
+     frame are encoded in the hevc data. The animation control
+     extension must be present. If the decoder does not support
+     animations, it shall decode the first frame only and ignore the
+     animation information.
 
      'picture_width' is the picture width in pixels. The value 0 is
      not allowed.
@@ -270,10 +292,20 @@ hevc_data()
        4: Thumbnail (the thumbnail shall be a lower resolution version
        of the image and stored in BPG format).
 
+       5: Animation control data.
+
      The decoder shall ignore the tags it does not support.
 
      'extension_tag_length' is the length in bytes of the extension tag.
 
+     'loop_count' gives the number of times the animation shall be
+     played. The value of 0 means infinite.
+     
+     'frame_period_num' and 'frame_period_den' encode the default
+     delay between each frame as frame_period_num/frame_period_den
+     seconds. The value of 0 for 'frame_period_num' or
+     'frame_period_den' is forbidden.
+     
      'hevc_header_length' is the length in bytes of the following data
      up to and including 'trailing_bits'.
      
@@ -324,7 +356,12 @@ hevc_data()
        with cb_size = 1 << log2_min_luma_coding_block_size
      - bit_depth_luma_minus8 = bit_depth_minus_8
      - bit_depth_chroma_minus8 = bit_depth_minus_8
+     - max_transform_hierarchy_depth_inter = max_transform_hierarchy_depth_intra
      - scaling_list_enabled_flag = 0
+     - log2_max_pic_order_cnt_lsb_minus4 = 4
+     - amp_enabled_flag = 1
+     - sps_temporal_mvp_enabled_flag = 1
+     
 
      Alpha data encoding:
 
@@ -338,6 +375,16 @@ hevc_data()
        slices and should be interleaved with color slices. alpha NALs
        shall come before the corresponding color NALs.
 
+     Animation encoding:
+
+     - The optional prefix SEI with payloadType = 257 (defined in
+       frame_duration_sei()) specifies that the image must be repeated
+       'frame_duration' times. 'frame_duration' shall not be zero. If
+       the frame duration SEI is not present for a given frame,
+       frame_duration = 1 shall be assumed by the decoder. If alpha
+       data is present, the frame duration SEI shall be present only
+       for the color data.
+     
 3.3) HEVC Profile
 -----------------
 
@@ -365,6 +412,14 @@ image shall be cropped. If a horizontal (resp. vertical) decimation by
 two is done for the chroma and that the width (resp. height) is n
 pixels, ceil(n/2) pixels must be kept as the resulting chroma
 information.
+
+When animations are present, the next frames shall be encoded with the
+following changes:
+
+- P slices are allowed (but B slices are not allowed).
+
+- Only the previous picture can be used as reference (hence a DPB size
+  of 2 pictures).
 
 4) Design choices
 -----------------
@@ -433,6 +488,20 @@ information.
   extension by using a (tag, lengh) representation. The decoder can
   easily skip all the metadata because their length is explicitly
   stored in the image header.
+
+- Animations: they are interesting compared to WebM or MP4 short
+  videos for the following reasons:
+    * transparency is supported
+    * lossless encoding is supported
+    * the decoding resources are smaller than with a generic video
+      player because only two frames need to be stored (DPB size = 2).
+    * the animations are expected to be small so the decoder can cache
+      all the decoded frames in memory.
+    * the animation can be decoded as a still image if the decoder
+      does not support animations.
+  Compared to the other animated image formats (GIF, APNG, WebP), the
+  compression ratio is usually much higher because of the HEVC inter
+  frame prediction.
 
 5) References
 -------------

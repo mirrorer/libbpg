@@ -178,6 +178,12 @@ static int decode_nal_sei_message(HEVCContext *s)
             av_log(s->avctx, AV_LOG_DEBUG, "Skipped PREFIX SEI %d\n", payload_type);
         } else 
 #endif
+#ifdef USE_FRAME_DURATION_SEI
+        if (payload_type == 257) {
+            /* frame duration in multiples of the frame rate period */
+            s->frame_duration = get_bits(gb, 16);
+        } else
+#endif
         {
             av_log(s->avctx, AV_LOG_DEBUG, "Skipped PREFIX SEI %d\n", payload_type);
             skip_bits(gb, 8*payload_size);

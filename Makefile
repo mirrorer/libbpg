@@ -8,6 +8,8 @@
 #USE_X265=y
 # Enable the JCTVC code (best quality but slow) for the encoder
 USE_JCTVC=y
+# Compile bpgview (SDL and SDL_image libraries needed)
+USE_BPGVIEW=y
 # Enable it to use bit depths > 12 (need more tests to validate encoder)
 #USE_JCTVC_HIGH_BIT_DEPTH=y
 # Enable the cross compilation for Windows
@@ -45,7 +47,7 @@ CFLAGS+=-DRExt__HIGH_BIT_DEPTH_SUPPORT
 endif
 
 # Emscriptem config
-EMLDFLAGS:=-s "EXPORTED_FUNCTIONS=['_bpg_decoder_open','_bpg_decoder_decode','_bpg_decoder_get_info','_bpg_decoder_start','_bpg_decoder_get_line','_bpg_decoder_close','_malloc','_free']"
+EMLDFLAGS:=-s "EXPORTED_FUNCTIONS=['_bpg_decoder_open','_bpg_decoder_decode','_bpg_decoder_get_info','_bpg_decoder_start','_bpg_decoder_get_frame_duration','_bpg_decoder_get_line','_bpg_decoder_close','_malloc','_free']"
 EMLDFLAGS+=-s NO_FILESYSTEM=1 -s NO_BROWSER=1
 #EMLDFLAGS+=-O1 --post-js post.js
 EMLDFLAGS+=-O3 --memory-init-file 0 --closure 1 --post-js post.js
@@ -61,8 +63,11 @@ CFLAGS+=-g
 CXXFLAGS=$(CFLAGS)
 
 PROGS=bpgdec$(EXE) bpgenc$(EXE)
+ifdef USE_BPGVIEW
+PROGS+=bpgview$(EXE)
+endif
 ifdef USE_EMCC
-PROGS+=bpgdec.js bpgdec8b.js
+PROGS+=bpgdec.js bpgdec8.js bpgdec8a.js
 endif
 
 all: $(PROGS)
@@ -70,7 +75,7 @@ all: $(PROGS)
 LIBBPG_OBJS:=$(addprefix libavcodec/, \
 hevc_cabac.o  hevc_filter.o  hevc.o         hevcpred.o  hevc_refs.o\
 hevcdsp.o     hevc_mvs.o     hevc_ps.o   hevc_sei.o\
-utils.o cabac.o golomb.o )
+utils.o cabac.o golomb.o videodsp.o )
 LIBBPG_OBJS+=$(addprefix libavutil/, mem.o buffer.o log2_tab.o frame.o pixdesc.o md5.o )
 LIBBPG_OBJS+=libbpg.o
 
@@ -78,11 +83,15 @@ LIBBPG_JS_OBJS:=$(patsubst %.o, %.js.o, $(LIBBPG_OBJS)) tmalloc.js.o
 
 LIBBPG_JS8_OBJS:=$(patsubst %.o, %.js8.o, $(LIBBPG_OBJS)) tmalloc.js8.o
 
-$(LIBBPG_OBJS): CFLAGS+=-D_ISOC99_SOURCE -D_POSIX_C_SOURCE=200112 -D_XOPEN_SOURCE=600 -DHAVE_AV_CONFIG_H -std=c99 -D_GNU_SOURCE=1 -DUSE_VAR_BIT_DEPTH
+LIBBPG_JS8A_OBJS:=$(patsubst %.o, %.js8a.o, $(LIBBPG_OBJS)) tmalloc.js8a.o
+
+$(LIBBPG_OBJS): CFLAGS+=-D_ISOC99_SOURCE -D_POSIX_C_SOURCE=200112 -D_XOPEN_SOURCE=600 -DHAVE_AV_CONFIG_H -std=c99 -D_GNU_SOURCE=1 -DUSE_VAR_BIT_DEPTH -DUSE_PRED
 
 $(LIBBPG_JS_OBJS): EMCFLAGS+=-D_ISOC99_SOURCE -D_POSIX_C_SOURCE=200112 -D_XOPEN_SOURCE=600 -DHAVE_AV_CONFIG_H -std=c99 -D_GNU_SOURCE=1 -DUSE_VAR_BIT_DEPTH
 
 $(LIBBPG_JS8_OBJS): EMCFLAGS+=-D_ISOC99_SOURCE -D_POSIX_C_SOURCE=200112 -D_XOPEN_SOURCE=600 -DHAVE_AV_CONFIG_H -std=c99 -D_GNU_SOURCE=1
+
+$(LIBBPG_JS8A_OBJS): EMCFLAGS+=-D_ISOC99_SOURCE -D_POSIX_C_SOURCE=200112 -D_XOPEN_SOURCE=600 -DHAVE_AV_CONFIG_H -std=c99 -D_GNU_SOURCE=1 -DUSE_PRED
 
 BPGENC_OBJS:=bpgenc.o
 BPGENC_LIBS:=
@@ -121,19 +130,28 @@ BPGENC_OBJS+=jctvc_glue.o jctvc/libjctvc.a
 bpgenc.o: CFLAGS+=-DUSE_JCTVC
 endif # USE_JCTVC
 
+
 ifdef CONFIG_WIN32
-LIBS:=-lz
+
 LDFLAGS+=-static
+BPGDEC_LIBS:=-Wl,-dy -lpng -lz -Wl,-dn
+BPGENC_LIBS+=-Wl,-dy -lpng -ljpeg -lz -Wl,-dn
+BPGVIEW_LIBS:=-lmingw32 -lSDLmain -Wl,-dy -lSDL_image -lSDL -Wl,-dn -mwindows
+
 else
+
 ifdef CONFIG_APPLE
 LIBS:=
 else
 LIBS:=-lrt
 endif # !CONFIG_APPLE 
 LIBS+=-lm -lpthread
-endif # !CONFIG_WIN32
 
+BPGDEC_LIBS:=-lpng $(LIBS)
 BPGENC_LIBS+=-lpng -ljpeg $(LIBS)
+BPGVIEW_LIBS:=-lSDL_image -lSDL $(LIBS)
+
+endif #!CONFIG_WIN32
 
 bpgenc.o: CFLAGS+=-Wno-unused-but-set-variable
 
@@ -141,16 +159,22 @@ libbpg.a: $(LIBBPG_OBJS)
 	$(AR) rcs $@ $^
 
 bpgdec$(EXE): bpgdec.o libbpg.a
-	$(CC) $(LDFLAGS) -o $@ $^ -lpng $(LIBS)
+	$(CC) $(LDFLAGS) -o $@ $^ $(BPGDEC_LIBS)
 
 bpgenc$(EXE): $(BPGENC_OBJS)
 	$(CXX) $(LDFLAGS) -o $@ $^ $(BPGENC_LIBS)
 
+bpgview$(EXE): bpgview.o libbpg.a
+	$(CC) $(LDFLAGS) -o $@ $^ $(BPGVIEW_LIBS)
+
 bpgdec.js: $(LIBBPG_JS_OBJS) post.js
 	$(EMCC) $(EMLDFLAGS) -s TOTAL_MEMORY=33554432 -o $@ $(LIBBPG_JS_OBJS)
 
-bpgdec8b.js: $(LIBBPG_JS8_OBJS) post.js
+bpgdec8.js: $(LIBBPG_JS8_OBJS) post.js
 	$(EMCC) $(EMLDFLAGS) -s TOTAL_MEMORY=16777216 -o $@ $(LIBBPG_JS8_OBJS)
+
+bpgdec8a.js: $(LIBBPG_JS8A_OBJS) post.js
+	$(EMCC) $(EMLDFLAGS) -s TOTAL_MEMORY=16777216 -o $@ $(LIBBPG_JS8A_OBJS)
 
 size:
 	strip bpgdec
@@ -178,6 +202,9 @@ clean:
 	$(EMCC) $(EMCFLAGS) -c -o $@ $<
 
 %.js8.o: %.c
+	$(EMCC) $(EMCFLAGS) -c -o $@ $<
+
+%.js8a.o: %.c
 	$(EMCC) $(EMCFLAGS) -c -o $@ $<
 
 -include $(wildcard *.d)

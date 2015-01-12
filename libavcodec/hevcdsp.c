@@ -238,45 +238,31 @@ void ff_hevc_dsp_init(HEVCDSPContext *hevcdsp, int bit_depth)
     PEL_FUNC(put_hevc_qpel_bi_w, 1, 1, put_hevc_qpel_bi_w_hv, depth)
 
 #ifdef USE_PRED
-#define HEVC_DSP(depth)                                                     \
-    hevcdsp->put_pcm                = FUNC(put_pcm, depth);                 \
-    hevcdsp->transform_add[0]       = FUNC(transform_add4x4, depth);        \
-    hevcdsp->transform_add[1]       = FUNC(transform_add8x8, depth);        \
-    hevcdsp->transform_add[2]       = FUNC(transform_add16x16, depth);      \
-    hevcdsp->transform_add[3]       = FUNC(transform_add32x32, depth);      \
-    hevcdsp->transform_skip         = FUNC(transform_skip, depth);          \
-    hevcdsp->transform_rdpcm        = FUNC(transform_rdpcm, depth);         \
-    hevcdsp->idct_4x4_luma          = FUNC(transform_4x4_luma, depth);      \
-    hevcdsp->idct[0]                = FUNC(idct_4x4, depth);                \
-    hevcdsp->idct[1]                = FUNC(idct_8x8, depth);                \
-    hevcdsp->idct[2]                = FUNC(idct_16x16, depth);              \
-    hevcdsp->idct[3]                = FUNC(idct_32x32, depth);              \
-                                                                            \
-    hevcdsp->idct_dc[0]             = FUNC(idct_4x4_dc, depth);             \
-    hevcdsp->idct_dc[1]             = FUNC(idct_8x8_dc, depth);             \
-    hevcdsp->idct_dc[2]             = FUNC(idct_16x16_dc, depth);           \
-    hevcdsp->idct_dc[3]             = FUNC(idct_32x32_dc, depth);           \
-                                                                            \
-    hevcdsp->sao_band_filter    = FUNC(sao_band_filter_0, depth);              \
-    hevcdsp->sao_edge_filter[0] = FUNC(sao_edge_filter_0, depth);              \
-    hevcdsp->sao_edge_filter[1] = FUNC(sao_edge_filter_1, depth);              \
-                                                                               \
+
+#ifdef USE_BIPRED
+
+#define HEVC_DSP_PRED(depth)                                                   \
     QPEL_FUNCS(depth);                                                         \
     QPEL_UNI_FUNCS(depth);                                                     \
     QPEL_BI_FUNCS(depth);                                                      \
     EPEL_FUNCS(depth);                                                         \
     EPEL_UNI_FUNCS(depth);                                                     \
-    EPEL_BI_FUNCS(depth);                                                      \
-                                                                               \
-    hevcdsp->hevc_h_loop_filter_luma     = FUNC(hevc_h_loop_filter_luma, depth);   \
-    hevcdsp->hevc_v_loop_filter_luma     = FUNC(hevc_v_loop_filter_luma, depth);   \
-    hevcdsp->hevc_h_loop_filter_chroma   = FUNC(hevc_h_loop_filter_chroma, depth); \
-    hevcdsp->hevc_v_loop_filter_chroma   = FUNC(hevc_v_loop_filter_chroma, depth); \
-    hevcdsp->hevc_h_loop_filter_luma_c   = FUNC(hevc_h_loop_filter_luma, depth);   \
-    hevcdsp->hevc_v_loop_filter_luma_c   = FUNC(hevc_v_loop_filter_luma, depth);   \
-    hevcdsp->hevc_h_loop_filter_chroma_c = FUNC(hevc_h_loop_filter_chroma, depth); \
-    hevcdsp->hevc_v_loop_filter_chroma_c = FUNC(hevc_v_loop_filter_chroma, depth)
+    EPEL_BI_FUNCS(depth);
+
 #else
+
+#define HEVC_DSP_PRED(depth)                                                   \
+    QPEL_UNI_FUNCS(depth);                                                     \
+    EPEL_UNI_FUNCS(depth);
+
+#endif
+
+#else
+
+#define HEVC_DSP_PRED(depth)
+
+#endif
+
 #define HEVC_DSP(depth)                                                     \
     hevcdsp->put_pcm                = FUNC(put_pcm, depth);                 \
     hevcdsp->transform_add[0]       = FUNC(transform_add4x4, depth);        \
@@ -295,7 +281,7 @@ void ff_hevc_dsp_init(HEVCDSPContext *hevcdsp, int bit_depth)
     hevcdsp->idct_dc[1]             = FUNC(idct_8x8_dc, depth);             \
     hevcdsp->idct_dc[2]             = FUNC(idct_16x16_dc, depth);           \
     hevcdsp->idct_dc[3]             = FUNC(idct_32x32_dc, depth);           \
-                                                                            \
+    HEVC_DSP_PRED(depth)                                                    \
     hevcdsp->sao_band_filter    = FUNC(sao_band_filter_0, depth);              \
     hevcdsp->sao_edge_filter[0] = FUNC(sao_edge_filter_0, depth);              \
     hevcdsp->sao_edge_filter[1] = FUNC(sao_edge_filter_1, depth);              \
@@ -308,7 +294,6 @@ void ff_hevc_dsp_init(HEVCDSPContext *hevcdsp, int bit_depth)
     hevcdsp->hevc_v_loop_filter_luma_c   = FUNC(hevc_v_loop_filter_luma, depth);   \
     hevcdsp->hevc_h_loop_filter_chroma_c = FUNC(hevc_h_loop_filter_chroma, depth); \
     hevcdsp->hevc_v_loop_filter_chroma_c = FUNC(hevc_v_loop_filter_chroma, depth)
-#endif
 
 #ifdef USE_PRED
 int i = 0;

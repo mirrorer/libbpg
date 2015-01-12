@@ -1828,5 +1828,7 @@
 //#define USE_FULL           /* include HEVC code not relevant for BPG decoding */
 //#define USE_FUNC_PTR /* use function pointers for dsp */
 //#define USE_AV_LOG /* include av_log() */
+#define USE_FRAME_DURATION_SEI /* for animations */
+//#define USE_BIPRED /* allow bi-prediction */
 
 #endif /* FFMPEG_CONFIG_H */

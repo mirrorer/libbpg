@@ -30,8 +30,13 @@
 #include <libavcodec/avcodec.h>
 #include <libavutil/common.h>
 
+/* The following global defines are used:
+   - USE_VAR_BIT_DEPTH : support of bit depth > 8 bits
+   - USE_PRED : support of animations 
+*/
+   
 #ifndef EMSCRIPTEN
-#define USE_RGB48
+#define USE_RGB48 /* support all pixel formats */
 //#define DEBUG
 #endif
 
@@ -72,6 +77,8 @@ typedef void ColorConvertFunc(ColorConvertState *s,
                               int n, int incr);
 
 struct BPGDecoderContext {
+    AVCodecContext *dec_ctx;
+    AVCodecContext *alpha_dec_ctx;
     AVFrame *frame;
     AVFrame *alpha_frame;
     int w, h;
@@ -82,14 +89,27 @@ struct BPGDecoderContext {
     uint8_t has_w_plane;
     uint8_t limited_range;
     uint8_t premultiplied_alpha;
+    uint8_t has_animation;
     BPGColorSpaceEnum color_space;
-    int keep_extension_data; /* true if the extension data must be
-                                kept during parsing */
+    uint8_t keep_extension_data; /* true if the extension data must be
+                                    kept during parsing */
+    uint8_t decode_animation; /* true if animation decoding is enabled */
     BPGExtensionData *first_md;
 
+    /* animation */
+    uint16_t loop_count;
+    uint16_t frame_delay_num;
+    uint16_t frame_delay_den;
+    uint8_t *input_buf;
+    int input_buf_pos;
+    int input_buf_len;
+
     /* the following is used for format conversion */
+    uint8_t output_inited;
+    BPGDecoderOutputFormat out_fmt;
     uint8_t is_rgba;
-    uint8_t is_rgb48;
+    uint8_t is_16bpp;
+    uint8_t is_cmyk;
     int y; /* current line */
     int w2, h2;
     const uint8_t *y_buf, *cb_buf, *cr_buf, *a_buf;
@@ -171,35 +191,6 @@ static int get_ue(uint32_t *pv, const uint8_t *buf, int len)
     return ret;
 }
 
-static int decode_write_data(AVCodecContext *avctx,
-                             AVFrame *frame, int *frame_count,
-                             const uint8_t *buf, int buf_len)
-{
-    AVPacket avpkt;
-    int len, got_frame;
-
-    av_init_packet(&avpkt);
-    avpkt.data = (uint8_t *)buf;
-    avpkt.size = buf_len;
-    
-    len = avcodec_decode_video2(avctx, frame, &got_frame, &avpkt);
-    if (len < 0) {
-#ifdef DEBUG
-        fprintf(stderr, "Error while decoding frame %d\n", *frame_count);
-#endif
-        return len;
-    }
-    if (got_frame) {
-#ifdef DEBUG
-        printf("got frame %d\n", *frame_count);
-#endif
-        (*frame_count)++;
-    }
-    return 0;
-}
-
-extern AVCodec ff_hevc_decoder;
-
 static int build_msps(uint8_t **pbuf, int *pbuf_len,
                       const uint8_t *input_data, int input_data_len1,
                       int width, int height, int chroma_format_idc,
@@ -273,41 +264,6 @@ static int build_msps(uint8_t **pbuf, int *pbuf_len,
     *pbuf_len = idx;
     *pbuf = buf;
     return input_data_len1 - input_data_len;
-}
-
-static AVFrame *hevc_decode_frame(const uint8_t *buf, int buf_len)
-{
-    AVCodec *codec;
-    AVCodecContext *c;
-    AVFrame *frame;
-    int frame_count, ret;
-
-    codec = &ff_hevc_decoder;
-
-    c = avcodec_alloc_context3(codec);
-    if (!c) 
-        goto fail;
-    frame = av_frame_alloc();
-    if (!frame) 
-        goto fail;
-    /* for testing: use the MD5 or CRC in SEI to check the decoded bit
-       stream. */
-    c->err_recognition |= AV_EF_CRCCHECK; 
-    /* open it */
-    if (avcodec_open2(c, codec, NULL) < 0) 
-        goto fail;
-    
-    frame_count = 0;
-    ret = decode_write_data(c, frame, &frame_count, buf, buf_len);
-    avcodec_close(c);
-    if (ret < 0 || frame_count != 1)
-        goto fail;
-    av_free(c);
-    return frame;
- fail:
-    av_free(c);
-    av_frame_free(&frame);
-    return NULL;
 }
 
 /* return the position of the end of the NAL or -1 if error */
@@ -386,53 +342,117 @@ static int dyn_buf_push(DynBuf *s, const uint8_t *data, int len)
     return 0;
 }
 
-static int hevc_decode(AVFrame **pcframe, AVFrame **paframe,
-                       const uint8_t *buf, int buf_len,
-                       int width, int height, int chroma_format_idc,
-                       int bit_depth, int has_alpha)
+extern AVCodec ff_hevc_decoder;
+
+static int hevc_decode_init1(DynBuf *pbuf, AVFrame **pframe,
+                             AVCodecContext **pc, 
+                             const uint8_t *buf, int buf_len,
+                             int width, int height, int chroma_format_idc,
+                             int bit_depth)
 {
-    int nal_len, start, first_nal, nal_buf_len, ret, nuh_layer_id;
-    AVFrame *cframe = NULL, *aframe = NULL;
+    AVCodec *codec;
+    AVCodecContext *c;
+    AVFrame *frame;
     uint8_t *nal_buf;
-    DynBuf abuf_s, *abuf = &abuf_s;
-    DynBuf cbuf_s, *cbuf = &cbuf_s;
-    DynBuf *pbuf;
-
-    dyn_buf_init(abuf);
-    dyn_buf_init(cbuf);
-
-    if (has_alpha) {
-        ret = build_msps(&nal_buf, &nal_len, buf, buf_len,
-                         width, height, 0, bit_depth);
-        if (ret < 0)
-            goto fail;
-        buf += ret;
-        buf_len -= ret;
-        if (dyn_buf_push(abuf, nal_buf, nal_len) < 0)
-            goto fail;
-        free(nal_buf);
-    }
+    int nal_len, ret, ret1;
 
     ret = build_msps(&nal_buf, &nal_len, buf, buf_len,
                      width, height, chroma_format_idc, bit_depth);
     if (ret < 0)
-        goto fail;
-    buf += ret;
-    buf_len -= ret;
-    if (dyn_buf_push(cbuf, nal_buf, nal_len) < 0)
-        goto fail;
-    free(nal_buf);
+        return -1;
+    ret1 = dyn_buf_push(pbuf, nal_buf, nal_len);
+    av_free(nal_buf);
+    if (ret1 < 0)
+        return -1;
+    
+    codec = &ff_hevc_decoder;
 
-    first_nal = 1;
+    c = avcodec_alloc_context3(codec);
+    if (!c) 
+        return -1;
+    frame = av_frame_alloc();
+    if (!frame) 
+        return -1;
+    /* for testing: use the MD5 or CRC in SEI to check the decoded bit
+       stream. */
+    c->err_recognition |= AV_EF_CRCCHECK; 
+    /* open it */
+    if (avcodec_open2(c, codec, NULL) < 0) {
+        av_frame_free(&frame);
+        return -1;
+    }
+    *pc = c;
+    *pframe = frame;
+    return ret;
+}
+
+static int hevc_write_frame(AVCodecContext *avctx,
+                            AVFrame *frame,
+                            uint8_t *buf, int buf_len)
+{
+    AVPacket avpkt;
+    int len, got_frame;
+
+    av_init_packet(&avpkt);
+    avpkt.data = (uint8_t *)buf;
+    avpkt.size = buf_len;
+    /* avoid using uninitialized data */
+    memset(buf + buf_len, 0, FF_INPUT_BUFFER_PADDING_SIZE);
+    len = avcodec_decode_video2(avctx, frame, &got_frame, &avpkt);
+    if (len < 0 || !got_frame)
+        return -1;
+    else
+        return 0;
+}
+
+static int hevc_decode_frame_internal(BPGDecoderContext *s,
+                                      DynBuf *abuf, DynBuf *cbuf,
+                                      const uint8_t *buf, int buf_len1,
+                                      int first_nal)
+{
+    int nal_len, start, nal_buf_len, ret, nuh_layer_id, buf_len, has_alpha;
+    int nut, frame_start_found[2];
+    DynBuf *pbuf;
+    uint8_t *nal_buf;
+
+    has_alpha = (s->alpha_dec_ctx != NULL);
+    buf_len = buf_len1;
+    frame_start_found[0] = 0;
+    frame_start_found[1] = 0;
     while (buf_len > 0) {
-        nal_len = find_nal_end(buf, buf_len, !first_nal);
-        if (nal_len < 0)
+        if (buf_len < (first_nal ? 3 : 0) + 2)
             goto fail;
         if (first_nal)
             start = 0;
         else
             start = 3 + (buf[2] == 0);
+        if (buf_len < start + 3)
+            goto fail;
         nuh_layer_id = ((buf[start] & 1) << 5) | (buf[start + 1] >> 3);
+        nut = (buf[start] >> 1) & 0x3f;
+#if 0
+        printf("nal: type=%d layer_id=%d fs=%d %d\n", 
+               nut, nuh_layer_id, frame_start_found[0], frame_start_found[1]);
+#endif
+        /* Note: we assume the alpha and color data are correctly
+           interleaved */
+        if ((nut >= 32 && nut <= 35) || nut == 39 || nut >= 41) {
+            if (frame_start_found[0] && frame_start_found[has_alpha])
+                break;
+        } else if ((nut <= 9 || (nut >= 16 && nut <= 21)) &&  
+                   start + 2 < buf_len && (buf[start + 2] & 0x80)) {
+            /* first slice segment */
+            if (frame_start_found[0] && frame_start_found[has_alpha])
+                break;
+            if (has_alpha && nuh_layer_id == 1)
+                frame_start_found[1] = 1;
+            else
+                frame_start_found[0] = 1;
+        }
+        
+        nal_len = find_nal_end(buf, buf_len, !first_nal);
+        if (nal_len < 0)
+            goto fail;
         nal_buf_len = nal_len - start + 3;
         if (has_alpha && nuh_layer_id == 1)
             pbuf = abuf;
@@ -453,26 +473,98 @@ static int hevc_decode(AVFrame **pcframe, AVFrame **paframe,
         first_nal = 0;
     }
     
-    if (has_alpha) {
-        aframe = hevc_decode_frame(abuf->buf, abuf->len);
-        if (!aframe)
+    if (s->alpha_dec_ctx) {
+        if (dyn_buf_resize(abuf, abuf->len + FF_INPUT_BUFFER_PADDING_SIZE) < 0)
+            goto fail;
+        ret = hevc_write_frame(s->alpha_dec_ctx, s->alpha_frame, abuf->buf, abuf->len);
+        if (ret < 0)
             goto fail;
     }
-    cframe = hevc_decode_frame(cbuf->buf, cbuf->len);
-    if (!cframe)
+
+    if (dyn_buf_resize(cbuf, cbuf->len + FF_INPUT_BUFFER_PADDING_SIZE) < 0)
         goto fail;
-    ret = 0;
+    ret = hevc_write_frame(s->dec_ctx, s->frame, cbuf->buf, cbuf->len);
+    if (ret < 0)
+        goto fail;
+    ret = buf_len1 - buf_len;
  done:
-    av_free(abuf->buf);
-    av_free(cbuf->buf);
-    *pcframe = cframe;
-    *paframe = aframe;
     return ret;
  fail:
-    av_frame_free(&cframe);
-    av_frame_free(&aframe);
     ret = -1;
     goto done;
+}
+
+/* decode the first frame */
+static int hevc_decode_start(BPGDecoderContext *s,
+                             const uint8_t *buf, int buf_len1,
+                             int width, int height, int chroma_format_idc,
+                             int bit_depth, int has_alpha)
+{
+    int ret, buf_len;
+    DynBuf abuf_s, *abuf = &abuf_s;
+    DynBuf cbuf_s, *cbuf = &cbuf_s;
+
+    dyn_buf_init(abuf);
+    dyn_buf_init(cbuf);
+
+    buf_len = buf_len1;
+    if (has_alpha) {
+        ret = hevc_decode_init1(abuf, &s->alpha_frame, &s->alpha_dec_ctx,
+                                buf, buf_len, width, height, 0, bit_depth);
+        if (ret < 0)
+            goto fail;
+        buf += ret;
+        buf_len -= ret;
+    }
+    
+    ret = hevc_decode_init1(cbuf, &s->frame, &s->dec_ctx,
+                            buf, buf_len, width, height, chroma_format_idc, 
+                            bit_depth);
+    if (ret < 0)
+        goto fail;
+    buf += ret;
+    buf_len -= ret;
+    
+    ret = hevc_decode_frame_internal(s, abuf, cbuf, buf, buf_len, 1);
+    av_free(abuf->buf);
+    av_free(cbuf->buf);
+    if (ret < 0)
+        goto fail;
+    buf_len -= ret;
+    return buf_len1 - buf_len;
+ fail:
+    return -1;
+}
+
+#ifdef USE_PRED
+static int hevc_decode_frame(BPGDecoderContext *s,
+                             const uint8_t *buf, int buf_len)
+{
+    int ret;
+    DynBuf abuf_s, *abuf = &abuf_s;
+    DynBuf cbuf_s, *cbuf = &cbuf_s;
+
+    dyn_buf_init(abuf);
+    dyn_buf_init(cbuf);
+    ret = hevc_decode_frame_internal(s, abuf, cbuf, buf, buf_len, 0);
+    av_free(abuf->buf);
+    av_free(cbuf->buf);
+    return ret;
+}
+#endif
+
+static void hevc_decode_end(BPGDecoderContext *s)
+{
+    if (s->alpha_dec_ctx) {
+        avcodec_close(s->alpha_dec_ctx);
+        av_free(s->alpha_dec_ctx);
+        s->alpha_dec_ctx = NULL;
+    }
+    if (s->dec_ctx) {
+        avcodec_close(s->dec_ctx);
+        av_free(s->dec_ctx);
+        s->dec_ctx = NULL;
+    }
 }
 
 uint8_t *bpg_decoder_get_data(BPGDecoderContext *img, int *pline_size, int plane)
@@ -507,6 +599,8 @@ int bpg_decoder_get_info(BPGDecoderContext *img, BPGImageInfo *p)
     p->limited_range = img->limited_range;
     p->color_space = img->color_space;
     p->bit_depth = img->bit_depth;
+    p->has_animation = img->has_animation;
+    p->loop_count = img->loop_count;
     return 0;
 }
 
@@ -720,7 +814,7 @@ static void interp2_vh(PIXEL *dst, PIXEL **src, int n, int y_pos,
 {
     const PIXEL *src0, *src1, *src2, *src3, *src4, *src5, *src6;
     int i, n2, shift, rnd;
-    PIXEL v;
+    int16_t v;
 
     src0 = src[(y_pos - 3) & 7];
     src1 = src[(y_pos - 2) & 7];
@@ -1175,6 +1269,24 @@ static void alpha_divide16(uint16_t *dst, int n)
     }
 }
 
+static void gray_one_minus8(uint8_t *dst, int n, int incr)
+{
+    int x;
+    for(x = 0; x < n; x++) {
+        dst[0] = 255 - dst[0];
+        dst += incr;
+    }
+}
+
+static void gray_one_minus16(uint16_t *dst, int n, int incr)
+{
+    int x;
+    for(x = 0; x < n; x++) {
+        dst[0] = 65535 - dst[0];
+        dst += incr;
+    }
+}
+
 static ColorConvertFunc *cs_to_rgb48[BPG_CS_COUNT] = {
     ycc_to_rgb48,
     rgb_to_rgb48,
@@ -1244,11 +1356,10 @@ static void convert_init(ColorConvertState *s,
 static int bpg_decoder_output_init(BPGDecoderContext *s,
                                    BPGDecoderOutputFormat out_fmt)
 {
-    int i, y1, c_idx;
-    PIXEL *cb_ptr, *cr_ptr;
+    int i;
 
 #ifdef USE_RGB48
-    if ((unsigned)out_fmt > BPG_OUTPUT_FORMAT_RGBA64)
+    if ((unsigned)out_fmt > BPG_OUTPUT_FORMAT_CMYK64)
         return -1;
 #else
     if ((unsigned)out_fmt > BPG_OUTPUT_FORMAT_RGBA32)
@@ -1256,22 +1367,12 @@ static int bpg_decoder_output_init(BPGDecoderContext *s,
 #endif
     s->is_rgba = (out_fmt == BPG_OUTPUT_FORMAT_RGBA32 ||
                     out_fmt == BPG_OUTPUT_FORMAT_RGBA64);
-    s->is_rgb48 = (out_fmt == BPG_OUTPUT_FORMAT_RGB48 ||
-                     out_fmt == BPG_OUTPUT_FORMAT_RGBA64);
-
-    s->y_buf = bpg_decoder_get_data(s, &s->y_linesize, 0);
-    if (s->format != BPG_FORMAT_GRAY) {
-        s->cb_buf = bpg_decoder_get_data(s, &s->cb_linesize, 1);
-        s->cr_buf = bpg_decoder_get_data(s, &s->cr_linesize, 2);
-        c_idx = 3;
-    } else {
-        c_idx = 1;
-    }
-    if (s->has_alpha)
-        s->a_buf = bpg_decoder_get_data(s, &s->a_linesize, c_idx);
-    else
-        s->a_buf = NULL;
-
+    s->is_16bpp = (out_fmt == BPG_OUTPUT_FORMAT_RGB48 ||
+                   out_fmt == BPG_OUTPUT_FORMAT_RGBA64 ||
+                   out_fmt == BPG_OUTPUT_FORMAT_CMYK64);
+    s->is_cmyk = (out_fmt == BPG_OUTPUT_FORMAT_CMYK32 ||
+                  out_fmt == BPG_OUTPUT_FORMAT_CMYK64);
+    
     if (s->format == BPG_FORMAT_420 || s->format == BPG_FORMAT_422) {
         s->w2 = (s->w + 1) / 2;
         s->h2 = (s->h + 1) / 2;
@@ -1285,29 +1386,14 @@ static int bpg_decoder_output_init(BPGDecoderContext *s,
                 s->cb_buf3[i] = av_malloc(s->w2 * sizeof(PIXEL));
                 s->cr_buf3[i] = av_malloc(s->w2 * sizeof(PIXEL));
             }
-            
-            /* init the vertical interpolation buffer */
-            for(i = 0; i < ITAPS; i++) {
-                y1 = i;
-                if (y1 > ITAPS2)
-                    y1 -= ITAPS;
-                if (y1 < 0)
-                    y1 = 0;
-                else if (y1 >= s->h2)
-                    y1 = s->h2 - 1;
-                cb_ptr = (PIXEL *)(s->cb_buf + y1 * s->cb_linesize);
-                cr_ptr = (PIXEL *)(s->cr_buf + y1 * s->cr_linesize);
-                memcpy(s->cb_buf3[i], cb_ptr, s->w2 * sizeof(PIXEL));
-                memcpy(s->cr_buf3[i], cr_ptr, s->w2 * sizeof(PIXEL));
-            }
         }
     }
-    convert_init(&s->cvt, s->bit_depth, s->is_rgb48 ? 16 : 8,
+    convert_init(&s->cvt, s->bit_depth, s->is_16bpp ? 16 : 8,
                  s->color_space, s->limited_range);
 
     if (s->format == BPG_FORMAT_GRAY) {
 #ifdef USE_RGB48
-        if (s->is_rgb48) {
+        if (s->is_16bpp) {
             s->cvt_func = gray_to_rgb48;
         } else 
 #endif
@@ -1316,7 +1402,7 @@ static int bpg_decoder_output_init(BPGDecoderContext *s,
         }
     } else {
 #ifdef USE_RGB48
-        if (s->is_rgb48) {
+        if (s->is_16bpp) {
             s->cvt_func = cs_to_rgb48[s->color_space];
         } else
 #endif
@@ -1340,26 +1426,105 @@ static void bpg_decoder_output_end(BPGDecoderContext *s)
     av_free(s->c_buf4);
 }
 
+int bpg_decoder_start(BPGDecoderContext *s, BPGDecoderOutputFormat out_fmt)
+{
+    int ret, c_idx;
+
+    if (!s->frame)
+        return -1;
+    
+    if (!s->output_inited) {
+        /* first frame is already decoded */
+        ret = bpg_decoder_output_init(s, out_fmt);
+        if (ret)
+            return ret;
+        s->output_inited = 1;
+        s->out_fmt = out_fmt;
+    } else {
+#ifdef USE_PRED
+        if (s->has_animation && s->decode_animation) {
+            if (out_fmt != s->out_fmt)
+                return -1;
+            if (s->input_buf_pos >= s->input_buf_len) {
+                return -1;
+            } else {
+                ret = hevc_decode_frame(s, s->input_buf + s->input_buf_pos, 
+                                        s->input_buf_len - s->input_buf_pos);
+                if (ret < 0)
+                    return -1;
+                s->input_buf_pos += ret;
+            }
+        } else 
+#endif
+        {
+            return -1;
+        }
+    }
+    s->y_buf = bpg_decoder_get_data(s, &s->y_linesize, 0);
+    if (s->format != BPG_FORMAT_GRAY) {
+        s->cb_buf = bpg_decoder_get_data(s, &s->cb_linesize, 1);
+        s->cr_buf = bpg_decoder_get_data(s, &s->cr_linesize, 2);
+        c_idx = 3;
+    } else {
+        c_idx = 1;
+    }
+    if (s->has_alpha)
+        s->a_buf = bpg_decoder_get_data(s, &s->a_linesize, c_idx);
+    else
+        s->a_buf = NULL;
+    s->y = 0;
+    return 0;
+}
+
+void bpg_decoder_get_frame_duration(BPGDecoderContext *s, int *pnum, int *pden)
+{
+#ifdef USE_PRED
+    if (s->frame && s->has_animation) {
+        *pnum = s->frame_delay_num * (s->frame->pts);
+        *pden = s->frame_delay_den;
+    } else 
+#endif
+    {
+        *pnum = 0;
+        *pden = 1;
+    }
+}
+
 int bpg_decoder_get_line(BPGDecoderContext *s, void *rgb_line1)
 {
     uint8_t *rgb_line = rgb_line1;
-    int w, h, y, pos, y2, y1, incr, y_frac;
+    int w, y, pos, y2, y1, incr, y_frac;
     PIXEL *y_ptr, *cb_ptr, *cr_ptr, *a_ptr;
 
-    w = s->w;
-    h = s->h;
     y = s->y;
-    
-    if ((unsigned)y >= h)
+    if ((unsigned)y >= s->h) 
         return -1;
+    w = s->w;
     
     y_ptr = (PIXEL *)(s->y_buf + y * s->y_linesize);
-    incr = 3 + s->is_rgba;
+    incr = 3 + (s->is_rgba || s->is_cmyk);
     switch(s->format) {
     case BPG_FORMAT_GRAY:
         s->cvt_func(&s->cvt, rgb_line, y_ptr, NULL, NULL, w, incr);
         break;
     case BPG_FORMAT_420:
+        if (y == 0) {
+            int i;
+            /* init the vertical interpolation buffer */
+            for(i = 0; i < ITAPS; i++) {
+                y1 = i;
+                if (y1 > ITAPS2)
+                    y1 -= ITAPS;
+                if (y1 < 0)
+                    y1 = 0;
+                else if (y1 >= s->h2)
+                    y1 = s->h2 - 1;
+                cb_ptr = (PIXEL *)(s->cb_buf + y1 * s->cb_linesize);
+                cr_ptr = (PIXEL *)(s->cr_buf + y1 * s->cr_linesize);
+                memcpy(s->cb_buf3[i], cb_ptr, s->w2 * sizeof(PIXEL));
+                memcpy(s->cr_buf3[i], cr_ptr, s->w2 * sizeof(PIXEL));
+            }
+        }
         y2 = y >> 1;
         pos = y2 % ITAPS;
         y_frac = y & 1;
@@ -1399,10 +1564,27 @@ int bpg_decoder_get_line(BPGDecoderContext *s, void *rgb_line1)
     }
 
     /* alpha output or CMYK handling */
+#ifdef USE_RGB48
+    if (s->is_cmyk) {
+        int i;
+        /* convert RGBW to CMYK */
+        if (s->is_16bpp) {
+            if (!s->has_w_plane)
+                put_dummy_gray16((uint16_t *)rgb_line + 3, w, 4);
+            for(i = 0; i < 4; i++)
+                gray_one_minus16((uint16_t *)rgb_line + i, w, 4);
+        } else {
+            if (!s->has_w_plane)
+                put_dummy_gray8(rgb_line + 3, w, 4);
+            for(i = 0; i < 4; i++)
+                gray_one_minus8(rgb_line + i, w, 4);
+        }
+    } else
+#endif
     if (s->has_w_plane) {
         a_ptr = (PIXEL *)(s->a_buf + y * s->a_linesize);
 #ifdef USE_RGB48
-        if (s->is_rgb48) {
+        if (s->is_16bpp) {
             alpha_combine16(&s->cvt, (uint16_t *)rgb_line, a_ptr, w, incr);
             if (s->is_rgba)
                 put_dummy_gray16((uint16_t *)rgb_line + 3, w, 4);
@@ -1413,49 +1595,34 @@ int bpg_decoder_get_line(BPGDecoderContext *s, void *rgb_line1)
             if (s->is_rgba)
                 put_dummy_gray8(rgb_line + 3, w, 4);
         }
-    } else {
-        if (s->is_rgba) {
+    } else if (s->is_rgba) {
 #ifdef USE_RGB48
-            if (s->is_rgb48) {
-                if (s->has_alpha) {
-                    a_ptr = (PIXEL *)(s->a_buf + y * s->a_linesize);
-                    gray_to_gray16(&s->cvt, 
-                                   (uint16_t *)rgb_line + 3, a_ptr, w, 4);
-                    if (s->premultiplied_alpha)
-                        alpha_divide16((uint16_t *)rgb_line, w);
-                } else {
-                    put_dummy_gray16((uint16_t *)rgb_line + 3, w, 4);
-                }
-            } else
-#endif
-            {
-                if (s->has_alpha) {
-                    a_ptr = (PIXEL *)(s->a_buf + y * s->a_linesize);
-                    gray_to_gray8(&s->cvt, rgb_line + 3, a_ptr, w, 4);
-                    if (s->premultiplied_alpha)
-                        alpha_divide8((uint8_t *)rgb_line, w);
-                } else {
-                    put_dummy_gray8(rgb_line + 3, w, 4);
-                }
+        if (s->is_16bpp) {
+            if (s->has_alpha) {
+                a_ptr = (PIXEL *)(s->a_buf + y * s->a_linesize);
+                gray_to_gray16(&s->cvt, 
+                               (uint16_t *)rgb_line + 3, a_ptr, w, 4);
+                if (s->premultiplied_alpha)
+                    alpha_divide16((uint16_t *)rgb_line, w);
+            } else {
+                put_dummy_gray16((uint16_t *)rgb_line + 3, w, 4);
             }
-        }
+        } else
+#endif
+        {
+            if (s->has_alpha) {
+                a_ptr = (PIXEL *)(s->a_buf + y * s->a_linesize);
+                gray_to_gray8(&s->cvt, rgb_line + 3, a_ptr, w, 4);
+                if (s->premultiplied_alpha)
+                    alpha_divide8((uint8_t *)rgb_line, w);
+            } else {
+                put_dummy_gray8(rgb_line + 3, w, 4);
+            }
+            }
     }
 
     /* go to next line */
     s->y++;
-    return 0;
-}
-
-int bpg_decoder_start(BPGDecoderContext *s, BPGDecoderOutputFormat out_fmt)
-{
-    int ret;
-
-    if (!s->frame || s->y >= 0)
-        return -1;
-    ret = bpg_decoder_output_init(s, out_fmt);
-    if (ret)
-        return ret;
-    s->y = 0;
     return 0;
 }
 
@@ -1477,6 +1644,10 @@ typedef struct {
     uint8_t has_w_plane;
     uint8_t premultiplied_alpha;
     uint8_t limited_range;
+    uint8_t has_animation;
+    uint16_t loop_count;
+    uint16_t frame_delay_num;
+    uint16_t frame_delay_den;
     BPGColorSpaceEnum color_space;
     uint32_t hevc_data_len;
     BPGExtensionData *first_md;
@@ -1511,7 +1682,10 @@ static int bpg_decode_header(BPGHeaderData *h,
     has_extension = (flags2 >> 3) & 1;
     alpha2_flag = (flags2 >> 2) & 1;
     h->limited_range = (flags2 >> 1) & 1;
-    
+    h->has_animation = flags2 & 1;
+    h->loop_count = 0;
+    h->frame_delay_num = 0;
+    h->frame_delay_den = 0;
     h->has_alpha = 0;
     h->has_w_plane = 0;
     h->premultiplied_alpha = 0;
@@ -1561,42 +1735,75 @@ static int bpg_decode_header(BPGHeaderData *h,
         ext_end = idx + extension_data_len;
         if (ext_end > buf_len)
             return -1;
-#ifndef EMSCRIPTEN
-        if (load_extensions) {
+        if (load_extensions || h->has_animation) {
             BPGExtensionData *md, **plast_md;
+            uint32_t tag, buf_len;
 
             plast_md = &h->first_md;
             while (idx < ext_end) {
-                md = av_malloc(sizeof(BPGExtensionData));
-                *plast_md = md;
-                plast_md = &md->next;
-
-                ret = get_ue32(&md->tag, buf + idx, ext_end - idx);
+                ret = get_ue32(&tag, buf + idx, ext_end - idx);
                 if (ret < 0) 
                     goto fail;
                 idx += ret;
 
-                ret = get_ue(&md->buf_len, buf + idx, ext_end - idx);
+                ret = get_ue(&buf_len, buf + idx, ext_end - idx);
                 if (ret < 0) 
                     goto fail;
                 idx += ret;
                 
-                if (idx + md->buf_len > ext_end) {
+                if (idx + buf_len > ext_end) {
                 fail:
                     bpg_decoder_free_extension_data(h->first_md);
                     return -1;
                 }
-                md->buf = av_malloc(md->buf_len);
-                memcpy(md->buf, buf + idx, md->buf_len);
-                idx += md->buf_len;
+                if (h->has_animation && tag == BPG_EXTENSION_TAG_ANIM_CONTROL) {
+                    int idx1;
+                    uint32_t loop_count, frame_delay_num, frame_delay_den;
+
+                    idx1 = idx;
+                    ret = get_ue(&loop_count, buf + idx1, ext_end - idx1);
+                    if (ret < 0) 
+                        goto fail;
+                    idx1 += ret;
+                    ret = get_ue(&frame_delay_num, buf + idx1, ext_end - idx1);
+                    if (ret < 0) 
+                        goto fail;
+                    idx1 += ret;
+                    ret = get_ue(&frame_delay_den, buf + idx1, ext_end - idx1);
+                    if (ret < 0) 
+                        goto fail;
+                    idx1 += ret;
+                    if (frame_delay_num == 0 || frame_delay_den == 0 ||
+                        (uint16_t)frame_delay_num != frame_delay_num ||
+                        (uint16_t)frame_delay_den != frame_delay_den ||
+                        (uint16_t)loop_count != loop_count)
+                        goto fail;
+                    h->loop_count = loop_count;
+                    h->frame_delay_num = frame_delay_num;
+                    h->frame_delay_den = frame_delay_den;
+                }
+                if (load_extensions) {
+                    md = av_malloc(sizeof(BPGExtensionData));
+                    md->tag = tag;
+                    md->buf_len = buf_len;
+                    *plast_md = md;
+                    plast_md = &md->next;
+                    
+                    md->buf = av_malloc(md->buf_len);
+                    memcpy(md->buf, buf + idx, md->buf_len);
+                }
+                idx += buf_len;
             }
         } else
-#endif
         {
             /* skip extension data */
             idx += extension_data_len;
         }
     }
+
+    /* must have animation control extension for animations */
+    if (h->has_animation && h->frame_delay_num == 0)
+        goto fail;
 
     if (h->hevc_data_len == 0)
         h->hevc_data_len = buf_len - idx;
@@ -1606,7 +1813,7 @@ static int bpg_decode_header(BPGHeaderData *h,
 
 int bpg_decoder_decode(BPGDecoderContext *img, const uint8_t *buf, int buf_len)
 {
-    int idx, has_alpha, bit_depth, color_space;
+    int idx, has_alpha, bit_depth, color_space, ret;
     uint32_t width, height;
     BPGHeaderData h_s, *h = &h_s;
 
@@ -1638,27 +1845,49 @@ int bpg_decoder_decode(BPGDecoderContext *img, const uint8_t *buf, int buf_len)
     img->limited_range = h->limited_range;
     img->color_space = color_space;
     img->bit_depth = bit_depth;
+    img->has_animation = h->has_animation;
+    img->loop_count = h->loop_count;
+    img->frame_delay_num = h->frame_delay_num;
+    img->frame_delay_den = h->frame_delay_den;
+
     img->first_md = h->first_md;
 
     if (idx + h->hevc_data_len > buf_len)
         goto fail;
-    if (hevc_decode(&img->frame, &img->alpha_frame,
-                    buf + idx, h->hevc_data_len,
-                    width, height, img->format, bit_depth, has_alpha) < 0)
-        goto fail;
-    idx += h->hevc_data_len;
 
+    /* decode the first frame */
+    ret = hevc_decode_start(img, buf + idx, buf_len - idx,
+                            width, height, img->format, bit_depth, has_alpha);
+    if (ret < 0)
+        goto fail;
+    idx += ret;
+
+#ifdef USE_PRED
+    /* XXX: add an option to avoid decoding animations ? */
+    img->decode_animation = 1;
+    if (img->has_animation && img->decode_animation) { 
+        int len;
+        /* keep trailing bitstream to decode the next frames */
+        len = buf_len - idx;
+        img->input_buf = av_malloc(len);
+        if (!img->input_buf)
+            goto fail;
+        memcpy(img->input_buf, buf + idx, len);
+        img->input_buf_len = len;
+        img->input_buf_pos = 0;
+    } else 
+#endif
+    {
+        hevc_decode_end(img);
+    }
     if (img->frame->width < img->w || img->frame->height < img->h)
         goto fail;
-    
     img->y = -1;
     return 0;
 
  fail:
-    if (img->frame)
-        av_frame_free(&img->frame);
-    if (img->alpha_frame)
-        av_frame_free(&img->alpha_frame);
+    av_frame_free(&img->frame);
+    av_frame_free(&img->alpha_frame);
     bpg_decoder_free_extension_data(img->first_md);
     img->first_md = NULL;
     return -1;
@@ -1667,10 +1896,10 @@ int bpg_decoder_decode(BPGDecoderContext *img, const uint8_t *buf, int buf_len)
 void bpg_decoder_close(BPGDecoderContext *s)
 {
     bpg_decoder_output_end(s);
-    if (s->frame)
-        av_frame_free(&s->frame);
-    if (s->alpha_frame)
-        av_frame_free(&s->alpha_frame);
+    av_free(s->input_buf);
+    hevc_decode_end(s);
+    av_frame_free(&s->frame);
+    av_frame_free(&s->alpha_frame);
     bpg_decoder_free_extension_data(s->first_md);
     av_free(s);
 }
@@ -1687,7 +1916,6 @@ void bpg_decoder_free_extension_data(BPGExtensionData *first_md)
     }
 #endif
 }
-
 
 #ifndef EMSCRIPTEN
 void bpg_decoder_keep_extension_data(BPGDecoderContext *s, int enable)
@@ -1720,6 +1948,8 @@ int bpg_decoder_get_info_from_buf(BPGImageInfo *p,
     p->limited_range = h->limited_range;
     p->color_space = h->color_space;
     p->bit_depth = h->bit_depth;
+    p->has_animation = h->has_animation;
+    p->loop_count = h->loop_count;
     if (pfirst_md)
         *pfirst_md = h->first_md;
     return 0;

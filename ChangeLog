@@ -1,3 +1,11 @@
+version 0.9.5:
+	
+- Added animation support.
+- added bpgview utility.
+- bpgenc: fixed support of some JPEG parameter combinations
+- fixed JS 8 bit only decoder and renamed it to bpgdec8.js
+- libbpg: added CMYK output format
+
 version 0.9.4:
 
 - Modified alpha plane encoding to allow progressive display and

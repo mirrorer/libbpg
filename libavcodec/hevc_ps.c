@@ -49,27 +49,7 @@ static const uint8_t default_scaling_list_inter[] = {
     24, 25, 28, 33, 41, 54, 71, 91
 };
 
-#ifndef USE_MSPS
-static const AVRational vui_sar[] = {
-    {  0,   1 },
-    {  1,   1 },
-    { 12,  11 },
-    { 10,  11 },
-    { 16,  11 },
-    { 40,  33 },
-    { 24,  11 },
-    { 20,  11 },
-    { 32,  11 },
-    { 80,  33 },
-    { 18,  11 },
-    { 15,  11 },
-    { 64,  33 },
-    { 160, 99 },
-    {  4,   3 },
-    {  3,   2 },
-    {  2,   1 },
-};
-
+#ifdef USE_PRED
 int ff_hevc_decode_short_term_rps(HEVCContext *s, ShortTermRPS *rps,
                                   const HEVCSPS *sps, int is_slice_header)
 {
@@ -198,6 +178,28 @@ int ff_hevc_decode_short_term_rps(HEVCContext *s, ShortTermRPS *rps,
     }
     return 0;
 }
+#endif
+
+#ifndef USE_MSPS
+static const AVRational vui_sar[] = {
+    {  0,   1 },
+    {  1,   1 },
+    { 12,  11 },
+    { 10,  11 },
+    { 16,  11 },
+    { 40,  33 },
+    { 24,  11 },
+    { 20,  11 },
+    { 32,  11 },
+    { 80,  33 },
+    { 18,  11 },
+    { 15,  11 },
+    { 64,  33 },
+    { 160, 99 },
+    {  4,   3 },
+    {  3,   2 },
+    {  2,   1 },
+};
 
 static int decode_profile_tier_level(HEVCContext *s, PTLCommon *ptl)
 {
@@ -978,7 +980,7 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
 
 
 #ifdef USE_MSPS
-    sps->log2_max_poc_lsb = 8; /* not used */
+    sps->log2_max_poc_lsb = 8; /* not used for intra */
     for (i = 0; i < sps->max_sub_layers; i++) {
         sps->temporal_layer[i].max_dec_pic_buffering = 1;
         sps->temporal_layer[i].num_reorder_pics      = 0;
@@ -1045,13 +1047,14 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
         goto err;
     }
 #ifdef USE_MSPS
-    sps->max_transform_hierarchy_depth_inter = 0; /* not used for intra */
+    sps->max_transform_hierarchy_depth_intra = get_ue_golomb_long(gb);
+    sps->max_transform_hierarchy_depth_inter = 
+        sps->max_transform_hierarchy_depth_intra; /* not used for intra */
+    sps->amp_enabled_flag = 1; /* not used for intra */
 #else
     sps->max_transform_hierarchy_depth_inter = get_ue_golomb_long(gb);
-#endif
     sps->max_transform_hierarchy_depth_intra = get_ue_golomb_long(gb);
 
-#ifndef USE_MSPS
     sps->scaling_list_enable_flag = get_bits1(gb);
     if (sps->scaling_list_enable_flag) {
 #ifdef USE_FULL
@@ -1092,7 +1095,7 @@ int ff_hevc_decode_nal_sps(HEVCContext *s)
 #ifdef USE_MSPS
     sps->nb_st_rps = 0; /* not used for intra */
     sps->long_term_ref_pics_present_flag = 0; /* not used for intra */
-    sps->sps_temporal_mvp_enabled_flag = 0; /* not used for intra */
+    sps->sps_temporal_mvp_enabled_flag = 1; /* not used for intra */
     sps->sps_strong_intra_smoothing_enable_flag = get_bits1(gb);
     sps->vui.sar = (AVRational){0, 1};
 #else

@@ -1022,7 +1022,7 @@ Bool TAppEncCfg::parseCfg( Int argc, Char* argv[] )
   ("SEIMasteringDisplayMinLuminance",                 m_masteringDisplay.minLuminance,                      0u, "Specifies the mastering display minimum luminance value in units of 1/10000 candela per square metre (32-bit code value)")
   ("SEIMasteringDisplayPrimaries",                    cfg_DisplayPrimariesCode,       cfg_DisplayPrimariesCode, "Mastering display primaries for all three colour planes in CIE xy coordinates in increments of 1/50000 (results in the ranges 0 to 50000 inclusive)")
   ("SEIMasteringDisplayWhitePoint",                   cfg_DisplayWhitePointCode,     cfg_DisplayWhitePointCode, "Mastering display white point CIE xy coordinates in normalised increments of 1/50000 (e.g. 0.333 = 16667)")
-  ("Verbose",                                m_verboseLevel,                                       1, "verboseLeveL")
+  ("Verbose",                                m_verboseLevel,                                       1, "verbose level")
     
   ;
 
@@ -1476,7 +1476,7 @@ Void TAppEncCfg::xCheckParameter()
       {
         xConfirmPara(bUsingGeneralRExtTools, "Combination of tools and profiles are not possible in the specified RExt profile.");
       }
-      if (!m_intraConstraintFlag && m_bitDepthConstraint==16 && m_chromaFormatConstraint==CHROMA_444)
+      if (!m_intraConstraintFlag && m_bitDepthConstraint==16 && m_chromaFormatConstraint==CHROMA_444 && 0)
       {
         fprintf(stderr, "********************************************************************************************************\n");
         fprintf(stderr, "** WARNING: The RExt constraint flags describe a non standard combination (used for development only) **\n");
