@@ -1786,6 +1786,7 @@ static int bpg_decode_header(BPGHeaderData *h,
                     md = av_malloc(sizeof(BPGExtensionData));
                     md->tag = tag;
                     md->buf_len = buf_len;
+                    md->next = NULL;
                     *plast_md = md;
                     plast_md = &md->next;
                     

@@ -1893,10 +1893,12 @@ static int build_modified_sps(uint8_t **pout_buf, int *pout_buf_len,
             int vui_hrd_parameters_present_flag, bitstream_restriction_flag;
 
             sar_present = get_bits(gb, 1);
-            sar_idx = get_bits(gb, 8);
-            if (sar_idx == 255) {
-                skip_bits(gb, 16); /* sar_num */ 
-                skip_bits(gb, 16); /* sar_den */ 
+            if (sar_present) {
+                sar_idx = get_bits(gb, 8);
+                if (sar_idx == 255) {
+                    skip_bits(gb, 16); /* sar_num */ 
+                    skip_bits(gb, 16); /* sar_den */ 
+                }
             }
             
             overscan_info_present_flag = get_bits(gb, 1);
@@ -2159,38 +2161,38 @@ static int build_modified_hevc(uint8_t **pout_buf,
 }
 
 typedef enum {
-#if defined(USE_JCTVC)
-    HEVC_ENCODER_JCTVC,
-#endif
 #if defined(USE_X265)
     HEVC_ENCODER_X265,
+#endif
+#if defined(USE_JCTVC)
+    HEVC_ENCODER_JCTVC,
 #endif
 
     HEVC_ENCODER_COUNT,
 } HEVCEncoderEnum;
 
 static char *hevc_encoder_name[HEVC_ENCODER_COUNT] = {
-#if defined(USE_JCTVC)
-    "jctvc",
-#endif
 #if defined(USE_X265)
     "x265",
+#endif
+#if defined(USE_JCTVC)
+    "jctvc",
 #endif
 };
 
 static HEVCEncoder *hevc_encoder_tab[HEVC_ENCODER_COUNT] = {
-#if defined(USE_JCTVC)
-    &jctvc_encoder,
-#endif
 #if defined(USE_X265)
     &x265_hevc_encoder,
+#endif
+#if defined(USE_JCTVC)
+    &jctvc_encoder,
 #endif
 };
 
 #define IMAGE_HEADER_MAGIC 0x425047fb
 
 #define DEFAULT_OUTFILENAME "out.bpg"
-#define DEFAULT_QP 28
+#define DEFAULT_QP 29
 #define DEFAULT_BIT_DEPTH 8
 
 #ifdef RExt__HIGH_BIT_DEPTH_SUPPORT

@@ -1,5 +1,11 @@
+version 0.9.6:
+
+- Faster encoding (x265 is the default encoder and is built in bpgenc).
+- Added monochrome support to x265.
+- Fixed metadata handling.
+
 version 0.9.5:
-	
+
 - Added animation support.
 - added bpgview utility.
 - bpgenc: fixed support of some JPEG parameter combinations

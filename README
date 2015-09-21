@@ -8,12 +8,6 @@ BPG Image library and utilities
   options should be OK for Linux). Type 'make' to compile and 'make
   install' to install the compiled binaries.
 
-- x265 usage: for much increased compression speed (but lower
-  quality), you can compile and install x265 and then enable its use
-  in the Makefile. x265 supports by default only 8 bits per component
-  and does not support monochrome encoding yet (hence no alpha nor
-  grayscale images can be encoded with it).
-
 - bpgview: in order to compile it you need to install the SDL and
   SDL_image libraries.
 
@@ -27,24 +21,57 @@ BPG Image library and utilities
 
 - The BPG file format is specified in doc/bpg_spec.txt.
 
-2) BPG encoder
+2) Compilation and Installation Notes
+-------------------------------------
+
+2.1) Linux
+----------
+
+  - Edit the Makefile to change the compile options (the default
+  compile options should be OK). Type 'make' to compile and 'make
+  install' to install the compiled binaries.
+ 
+  - Use 'make -j N' where N is the number of CPU cores to compile faster.
+
+  - The following packages must be installed: SDL-devel
+  SDL_image-devel yasm. It is recommended to use yasm version >= 1.3.0
+  to have a faster compilation.
+ 
+  - Only a 64 bit target is supported because x265 needs it for bit
+    depths > 8.
+
+2.2) Windows
+------------
+
+  - Only cross-compilation from Linux is supported.
+
+  - The following packages need to be installed: mingw64-gcc
+    mingw64-libpng mingw64-libjpeg-turbo mingw64-SDL mingw64-SDL_image
+    yasm. It is recommended to use yasm version >= 1.3.0 to have a
+    faster compilation.
+
+  - Only a 64 bit target is supported because x265 needs it for bit
+    depths > 8.
+
+3) BPG encoder
 --------------
 
 The BPG command line encoder is 'bpgenc'. It takes JPEG or PNG images
 as input.
 
-- Speed: by default bpgenc uses the JCTVC encoder which has a high
-  quality but is slow. If you compiled with x265, you can have a much
-  faster encoding with the '-e x265' option. With x265 you can also
-  select the encoding speed with the '-m' option (1 = fast, but larger
-  image, 9 = slower but smaller image). Warning: x265 does not support
-  monochrome (and alpha) yet, so you must use the JCTVC encoder for
-  these cases.
+- Speed: by default bpgenc uses the x265. You can compile the much
+  slower but more efficient JCTVC encoder and select it with the '-e
+  jctvc' option. With x265 you can select the encoding speed with the
+  '-m' option (1 = fast, but larger image, 9 = slower but smaller
+  image).
 
 - Bit depth: the default bit depth is 8. You can increase it to 10
   ('-b 10' option) to slightly increase the compression ratio. For web
   publishing it is generally not a good idea because the Javascript
-  decoder uses more memory.
+  decoder uses more memory. The compiled x265 encoder supports the bit
+  depth of 8, 10 and 12. The slower JCTVC encoder can be compiled to
+  support higher bit depths (up to 14) by enabling the Makefile
+  define: USE_JCTVC_HIGH_BIT_DEPTH.
 
 - Lossless compression is supported as a bonus thru the HEVC lossless
   capabilities. Use a PNG input in this case unless you know what you
@@ -60,15 +87,8 @@ as input.
     - the JCTVC encoder gives smaller images than the x265 encoder
       with lossless compression.
 
-- There is a difference of interpretation of the quantizer parameter
-  (-q option) between the x265 and JCTVC encoder. The default value is
-  optimized for the JCTVC encoder, not for x265. We will try to align
-  the x265 value to JCTVC in the future.
-
-- By default, the JCTVC encoder is limited to a precision of 12
-  bits. You can enable high bit depths (up to 14) by enabling the
-  Makefile define: USE_JCTVC_HIGH_BIT_DEPTH. The encoder is sligthly
-  slower in this case.
+- There is a small difference of interpretation of the quantizer
+  parameter (-q option) between the x265 and JCTVC encoder.
 
 - Color space and chroma format:
 
@@ -125,11 +145,11 @@ as input.
   with the '-keepmetadata' option. For JPEG input, EXIF, ICCP and XMP
   are copied. For PNG input, ICCP is copied.
 
-- Objective comparisons: the JCTVC encoder is tuned for PSNR only, not
-  for SSIM, so you should use PSNR when making objective comparison
-  with other formats. x265 is tuned by default for SSIM.
+- Objective comparisons: x265 is tuned by default for SSIM. the JCTVC
+  encoder is tuned for PSNR only, not for SSIM, so you should use PSNR
+  when making objective comparison with other formats.
 
-3) BPG decoder
+4) BPG decoder
 --------------
 
 The BPG command line decoder is bpgdec. It outputs a PNG or PPM
@@ -141,7 +161,7 @@ no decoded image is output).
 - The '-b' option selects the bit depth (8 or 16) of the PNG
   output. It is independent of the internal BPG bit depth.
 
-4) BPG viewer
+5) BPG viewer
 -------------
 
 The BPG image viewer uses the SDL library to display BPG images and
@@ -149,7 +169,7 @@ other image formats supported by the SDL_image library. The available
 keys are displayed by launching bpgview without parameters. bpgview
 supports BPG animations.
 
-5) BPG decoding library
+6) BPG decoding library
 -----------------------
 
 BPG images can be decoded in any program with the libbpg
@@ -161,7 +181,7 @@ provided as a static one.
 Currently there is no similar library for encoding so you should
 invoke the bpgenc utility.
 
-6) Javascript decoder
+7) Javascript decoder
 ---------------------
 
 The following Javascript decoders are available, sorted by increasing size:
@@ -193,7 +213,7 @@ be avoided, as with animated GIFs.
 asm.js gives an interesting speed boost, so we hope that more browsers
 will support this Javascript subset.
 
-7) FFmpeg modifications
+8) FFmpeg modifications
 -----------------------
 
 - Completed support of chroma_format_idc = 0 (monochrome mode).
@@ -217,16 +237,25 @@ will support this Javascript subset.
 - Stripped FFmpeg from all codecs except HEVC and the necessary
   support code.
 
-8) Licensing
-------------
+9) x265 modifications
+---------------------
+
+- Support of monochrome format (some part not used by BPG may be
+  missing).
+
+- Support of static build.
+
+10) Licensing
+-------------
 
 - libbpg and bpgdec are released under the LGPL license (the FFmpeg
   part is under the LGPL, the BPG specific part is released under the
   BSD license).
 
-- bpgenc is released under the BSD license (it includes the JCTVC code
-  which is released under the BSD license. The BPG specific part is
-  released under the BSD license).
+- bpgenc is released under the GPL version 2 license. The BPG specific
+  code is released under the BSD license. The JCTVC code is released
+  under the BSD license. The x265 code is released under the GPL
+  version 2 license.
 
 - BPG relies on the HEVC compression technology which may be protected
   by patents in some countries. Most devices already include or will

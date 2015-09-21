@@ -79,9 +79,7 @@ heic_file() {
      
      picture_data_length                                         ue7(32)
      if (extension_present_flag)  
-        extension_data_length                                    ue7(32)
-    
-     if (extension_present_flag) {
+         extension_data_length                                   ue7(32)
          extension_data()
      }
 

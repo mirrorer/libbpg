@@ -4,10 +4,10 @@
 #
 # Enable compilation of Javascript decoder with Emscripten
 #USE_EMCC=y
-# Enable x265 for the encoder (you must install it before)
-#USE_X265=y
+# Enable x265 for the encoder
+USE_X265=y
 # Enable the JCTVC code (best quality but slow) for the encoder
-USE_JCTVC=y
+#USE_JCTVC=y
 # Compile bpgview (SDL and SDL_image libraries needed)
 USE_BPGVIEW=y
 # Enable it to use bit depths > 12 (need more tests to validate encoder)
@@ -23,8 +23,8 @@ prefix=/usr/local
 #################################
 
 ifdef CONFIG_WIN32
-#CROSS_PREFIX:=x86_64-w64-mingw32-
-CROSS_PREFIX=i686-w64-mingw32-
+CROSS_PREFIX:=x86_64-w64-mingw32-
+#CROSS_PREFIX=i686-w64-mingw32-
 EXE:=.exe
 else
 CROSS_PREFIX:=
@@ -97,9 +97,41 @@ BPGENC_OBJS:=bpgenc.o
 BPGENC_LIBS:=
 
 ifdef USE_X265
-BPGENC_OBJS+=x265_glue.o
-BPGENC_LIBS+= -lx265
+
+X265_LIBS:=./x265.out/8bit/libx265.a ./x265.out/10bit/libx265.a ./x265.out/12bit/libx265.a
+BPGENC_OBJS+=x265_glue.o $(X265_LIBS)
+
 bpgenc.o: CFLAGS+=-DUSE_X265
+x265_glue.o: CFLAGS+=-I./x265/source -I./x265.out/8bit
+x265_glue.o: $(X265_LIBS)
+
+ifdef CONFIG_WIN32
+CMAKE_OPTS:=-DCMAKE_TOOLCHAIN_FILE=../../x265/build/msys/toolchain-x86_64-w64-mingw32.cmake
+else
+CMAKE_OPTS:=
+endif
+
+x265.out:
+	mkdir -p x265.out/8bit x265.out/10bit x265.out/12bit
+	cd x265.out/12bit && cmake ../../x265/source $(CMAKE_OPTS) -DHIGH_BIT_DEPTH=ON -DEXPORT_C_API=OFF -DENABLE_SHARED=OFF -DENABLE_CLI=OFF -DMAIN12=ON
+	cd x265.out/10bit && cmake ../../x265/source $(CMAKE_OPTS) -DHIGH_BIT_DEPTH=ON -DEXPORT_C_API=OFF -DENABLE_SHARED=OFF -DENABLE_CLI=OFF -DMAIN10=ON
+	cd x265.out/8bit && cmake ../../x265/source $(CMAKE_OPTS) -DLINKED_10BIT=ON -DLINKED_12BIT=ON -DENABLE_SHARED=OFF -DENABLE_CLI=OFF
+
+# use this target to manually rebuild x265
+x265_make: | x265.out
+	$(MAKE) -C x265.out/12bit
+	$(MAKE) -C x265.out/10bit
+	$(MAKE) -C x265.out/8bit
+
+x265_clean:
+	rm -rf x265.out
+
+$(X265_LIBS): x265_make
+
+else
+
+x265_clean:
+
 endif # USE_X265
 
 ifdef USE_JCTVC
@@ -133,10 +165,9 @@ endif # USE_JCTVC
 
 ifdef CONFIG_WIN32
 
-LDFLAGS+=-static
-BPGDEC_LIBS:=-Wl,-dy -lpng -lz -Wl,-dn
-BPGENC_LIBS+=-Wl,-dy -lpng -ljpeg -lz -Wl,-dn
-BPGVIEW_LIBS:=-lmingw32 -lSDLmain -Wl,-dy -lSDL_image -lSDL -Wl,-dn -mwindows
+BPGDEC_LIBS:=-lpng -lz
+BPGENC_LIBS+=-lpng -ljpeg -lz
+BPGVIEW_LIBS:=-lmingw32 -lSDLmain -lSDL_image -lSDL -mwindows
 
 else
 
@@ -171,10 +202,10 @@ bpgdec.js: $(LIBBPG_JS_OBJS) post.js
 	$(EMCC) $(EMLDFLAGS) -s TOTAL_MEMORY=33554432 -o $@ $(LIBBPG_JS_OBJS)
 
 bpgdec8.js: $(LIBBPG_JS8_OBJS) post.js
-	$(EMCC) $(EMLDFLAGS) -s TOTAL_MEMORY=16777216 -o $@ $(LIBBPG_JS8_OBJS)
+	$(EMCC) $(EMLDFLAGS) -s TOTAL_MEMORY=33554432 -o $@ $(LIBBPG_JS8_OBJS)
 
 bpgdec8a.js: $(LIBBPG_JS8A_OBJS) post.js
-	$(EMCC) $(EMLDFLAGS) -s TOTAL_MEMORY=16777216 -o $@ $(LIBBPG_JS8A_OBJS)
+	$(EMCC) $(EMLDFLAGS) -s TOTAL_MEMORY=33554432 -o $@ $(LIBBPG_JS8A_OBJS)
 
 size:
 	strip bpgdec
@@ -187,7 +218,7 @@ install: bpgenc bpgdec
 CLEAN_DIRS=doc html libavcodec libavutil \
      jctvc jctvc/TLibEncoder jctvc/TLibVideoIO jctvc/TLibCommon jctvc/libmd5
 
-clean:
+clean: x265_clean
 	rm -f $(PROGS) *.o *.a *.d *~ $(addsuffix /*.o, $(CLEAN_DIRS)) \
           $(addsuffix /*.d, $(CLEAN_DIRS)) $(addsuffix /*~, $(CLEAN_DIRS)) \
           $(addsuffix /*.a, $(CLEAN_DIRS))
