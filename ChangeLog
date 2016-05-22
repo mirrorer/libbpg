@@ -1,3 +1,10 @@
+version 0.9.7:
+
+- Increased the memory size of the JS decoder to 32 MiB and avoid
+  polluting the global namespace.
+- Published the Emscripten patches which reduce the size of the
+  generated JS code.
+
 version 0.9.6:
 
 - Faster encoding (x265 is the default encoder and is built in bpgenc).
