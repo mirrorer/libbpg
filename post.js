@@ -212,3 +212,6 @@ window.onload = function() {
         dec.load(url);
     }
 };
+
+/* end of dummy function enclosing all the emscripten code */
+})();

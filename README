@@ -240,7 +240,7 @@ will support this Javascript subset.
 9) x265 modifications
 ---------------------
 
-- Support of monochrome format (some part not used by BPG may be
+- Support of monochrome format (some parts not used by BPG may be
   missing).
 
 - Support of static build.
