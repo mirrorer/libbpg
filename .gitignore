@@ -1,0 +1,8 @@
+*.a
+*.o
+*.d
+*~
+bpgdec
+bpgview
+bpgenc
+*.out/
