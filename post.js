@@ -49,7 +49,7 @@ bpg_decoder_get_line: Module['cwrap']('bpg_decoder_get_line', 'number', [ 'numbe
 
 bpg_decoder_close: Module['cwrap']('bpg_decoder_close', 'void', [ 'number' ] ),
 
-load: function(url) 
+load: function(url)
 {
     var request = new XMLHttpRequest();
     var this1 = this;
@@ -77,7 +77,7 @@ _onload: function(request, event)
         console.log("could not decode image");
         return;
     }
-    
+
     img_info_buf = this.malloc(5 * 4);
     this.bpg_decoder_get_info(img, img_info_buf);
     /* extract the image info */
@@ -88,7 +88,7 @@ _onload: function(request, event)
     h = heap32[(img_info_buf + 4) >> 2];
     loop_count = heap16[(img_info_buf + 16) >> 1];
     //    console.log("image: w=" + w + " h=" + h + " loop_count=" + loop_count);
-    
+
     w4 = w * 4;
     rgba_line = this.malloc(w4);
 
@@ -98,7 +98,7 @@ _onload: function(request, event)
         /* select RGBA32 output */
         if (this.bpg_decoder_start(img, 1) < 0)
             break;
-        this.bpg_decoder_get_frame_duration(img, img_info_buf, 
+        this.bpg_decoder_get_frame_duration(img, img_info_buf,
                                             img_info_buf + 4);
         duration = (heap32[img_info_buf >> 2] * 1000) / heap32[(img_info_buf + 4) >> 2];
 
@@ -130,7 +130,7 @@ _onload: function(request, event)
 
 };
 
-window.onload = function() { 
+window.onload = function() {
     var i, n, el, tab, tab1, url, dec, canvas, id, style, ctx, dw, dh;
 
     /* put all images to load in a separate array */
@@ -177,7 +177,7 @@ window.onload = function() {
             var imageData = frames[0]['img'];
             function next_frame() {
                 var frame_index = dec.frame_index;
-                
+
                 /* compute next frame index */
                 if (++frame_index >= frames.length) {
                     if (dec['loop_count'] == 0 ||
