@@ -94,10 +94,12 @@ _onload: function(request, event)
 
     frame_count = 0;
     frames = [];
-    for(;;) {
+
+    var continue_loading = function () {
         /* select RGBA32 output */
         if (this.bpg_decoder_start(img, 1) < 0)
-            break;
+            return finish_loading();
+
         this.bpg_decoder_get_frame_duration(img, img_info_buf,
                                             img_info_buf + 4);
         duration = (heap32[img_info_buf >> 2] * 1000) / heap32[(img_info_buf + 4) >> 2];
@@ -113,19 +115,25 @@ _onload: function(request, event)
             }
         }
         frames[frame_count++] = { 'img': cimg, 'duration': duration };
-    }
 
-    this.free(rgba_line);
-    this.free(img_info_buf);
+        setTimeout(continue_loading, 0)
+    }.bind(this);
 
-    this.bpg_decoder_close(img);
+    var finish_loading = function () {
+        this.free(rgba_line);
+        this.free(img_info_buf);
 
-    this['loop_count'] = loop_count;
-    this['frames'] = frames;
-    this['imageData'] = frames[0]['img'];
+        this.bpg_decoder_close(img);
 
-    if (this['onload'])
-        this['onload']();
+        this['loop_count'] = loop_count;
+        this['frames'] = frames;
+        this['imageData'] = frames[0]['img'];
+
+        if (this['onload'])
+            this['onload']();
+    }.bind(this);
+
+    continue_loading();
 }
 
 };

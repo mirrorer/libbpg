@@ -49,8 +49,8 @@ endif
 
 # Emscriptem config
 EMLDFLAGS:=-s "EXPORTED_FUNCTIONS=['_bpg_decoder_open','_bpg_decoder_decode','_bpg_decoder_get_info','_bpg_decoder_start','_bpg_decoder_get_frame_duration','_bpg_decoder_get_line','_bpg_decoder_close','_malloc','_free']"
-EMLDFLAGS+=-s NO_FILESYSTEM=1 -s NO_BROWSER=1
-#EMLDFLAGS+=-O1 --pre-js pre.js --post-js post.js
+EMLDFLAGS+=-s NO_FILESYSTEM=1
+EMLDFLAGS+=-s TOTAL_MEMORY=16777216 -s TOTAL_STACK=16777216
 # Note: the closure compiler is disabled because it adds unwanted global symbols
 EMLDFLAGS+=-O3 --memory-init-file 0 --closure 0 --pre-js pre.js --post-js post.js
 EMCFLAGS:=$(CFLAGS)
@@ -202,13 +202,13 @@ bpgview$(EXE): bpgview.o libbpg.a
 	$(CC) $(LDFLAGS) -o $@ $^ $(BPGVIEW_LIBS)
 
 bpgdec.js: $(LIBBPG_JS_OBJS) pre.js post.js
-	$(EMCC) $(EMLDFLAGS) -s TOTAL_MEMORY=33554432 -o $@ $(LIBBPG_JS_OBJS)
+	$(EMCC) $(EMLDFLAGS) -o $@ $(LIBBPG_JS_OBJS)
 
 bpgdec8.js: $(LIBBPG_JS8_OBJS) pre.js post.js
-	$(EMCC) $(EMLDFLAGS) -s TOTAL_MEMORY=33554432 -o $@ $(LIBBPG_JS8_OBJS)
+	$(EMCC) $(EMLDFLAGS) -o $@ $(LIBBPG_JS8_OBJS)
 
 bpgdec8a.js: $(LIBBPG_JS8A_OBJS) pre.js post.js
-	$(EMCC) $(EMLDFLAGS) -s TOTAL_MEMORY=33554432 -o $@ $(LIBBPG_JS8A_OBJS)
+	$(EMCC) $(EMLDFLAGS) -o $@ $(LIBBPG_JS8A_OBJS)
 
 size:
 	strip bpgdec
