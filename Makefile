@@ -3,7 +3,7 @@
 # Compile options:
 #
 # Enable compilation of Javascript decoder with Emscripten
-USE_EMCC=y
+#USE_EMCC=y
 # Enable x265 for the encoder
 USE_X265=y
 # Enable the JCTVC code (best quality but slow) for the encoder
