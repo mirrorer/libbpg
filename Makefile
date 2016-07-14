@@ -215,7 +215,7 @@ size:
 	size bpgdec libbpg.o libavcodec/*.o libavutil/*.o | sort -n
 	gzip < bpgdec | wc
 
-install: bpgenc bpgdec bpgview
+install: $(PROGS)
 	install -s -m 755 $^ $(prefix)/bin
 
 CLEAN_DIRS=doc html libavcodec libavutil \
