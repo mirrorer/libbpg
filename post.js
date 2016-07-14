@@ -21,7 +21,7 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-window['BPGDecoder'] = function(ctx) {
+exports['BPGDecoder'] = function(ctx) {
     this.ctx = ctx;
     this['imageData'] = null;
     this['onload'] = null;
@@ -29,7 +29,7 @@ window['BPGDecoder'] = function(ctx) {
     this['loop_count'] = 0;
 }
 
-window['BPGDecoder'].prototype = {
+exports['BPGDecoder'].prototype = {
 
 malloc: Module['cwrap']('malloc', 'number', [ 'number' ]),
 
@@ -52,20 +52,19 @@ bpg_decoder_close: Module['cwrap']('bpg_decoder_close', 'void', [ 'number' ] ),
 load: function(url)
 {
     var request = new XMLHttpRequest();
-    var this1 = this;
 
     request.open("get", url, true);
     request.responseType = "arraybuffer";
     request.onload = function(event) {
-        this1._onload(request, event);
-    };
+        var data = request.response;
+        var array = new Uint8Array(data);
+        this.loadData(array);
+    }.bind(this);
     request.send();
 },
 
-_onload: function(request, event)
+loadData: function(array)
 {
-    var data = request.response;
-    var array = new Uint8Array(data);
     var img, w, h, img_info_buf, cimg, p0, rgba_line, w4, frame_count;
     var heap8, heap16, heap32, dst, v, i, y, func, duration, frames, loop_count;
 
@@ -116,7 +115,7 @@ _onload: function(request, event)
         }
         frames[frame_count++] = { 'img': cimg, 'duration': duration };
 
-        setTimeout(continue_loading, 0)
+        setTimeout(continue_loading, this.decode_delay || 0)
     }.bind(this);
 
     var finish_loading = function () {
@@ -138,7 +137,7 @@ _onload: function(request, event)
 
 };
 
-window.onload = function() {
+exports.onload = function() {
     var i, n, el, tab, tab1, url, dec, canvas, id, style, ctx, dw, dh;
 
     /* put all images to load in a separate array */
@@ -222,4 +221,4 @@ window.onload = function() {
 };
 
 /* end of dummy function enclosing all the emscripten code */
-})();
+})(this);

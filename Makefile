@@ -50,7 +50,7 @@ endif
 # Emscriptem config
 EMLDFLAGS:=-s "EXPORTED_FUNCTIONS=['_bpg_decoder_open','_bpg_decoder_decode','_bpg_decoder_get_info','_bpg_decoder_start','_bpg_decoder_get_frame_duration','_bpg_decoder_get_line','_bpg_decoder_close','_malloc','_free']"
 EMLDFLAGS+=-s NO_FILESYSTEM=1
-EMLDFLAGS+=-s TOTAL_MEMORY=16777216 -s TOTAL_STACK=16777216
+EMLDFLAGS+=-s TOTAL_MEMORY=33554432 -s TOTAL_STACK=33554432
 # Note: the closure compiler is disabled because it adds unwanted global symbols
 EMLDFLAGS+=-O3 --memory-init-file 0 --closure 0 --pre-js pre.js --post-js post.js
 EMCFLAGS:=$(CFLAGS)
