@@ -201,13 +201,13 @@ bpgenc$(EXE): $(BPGENC_OBJS)
 bpgview$(EXE): bpgview.o libbpg.a
 	$(CC) $(LDFLAGS) -o $@ $^ $(BPGVIEW_LIBS)
 
-bpgdec.js: $(LIBBPG_JS_OBJS) post.js
+bpgdec.js: $(LIBBPG_JS_OBJS) pre.js post.js
 	$(EMCC) $(EMLDFLAGS) -s TOTAL_MEMORY=33554432 -o $@ $(LIBBPG_JS_OBJS)
 
-bpgdec8.js: $(LIBBPG_JS8_OBJS) post.js
+bpgdec8.js: $(LIBBPG_JS8_OBJS) pre.js post.js
 	$(EMCC) $(EMLDFLAGS) -s TOTAL_MEMORY=33554432 -o $@ $(LIBBPG_JS8_OBJS)
 
-bpgdec8a.js: $(LIBBPG_JS8A_OBJS) post.js
+bpgdec8a.js: $(LIBBPG_JS8A_OBJS) pre.js post.js
 	$(EMCC) $(EMLDFLAGS) -s TOTAL_MEMORY=33554432 -o $@ $(LIBBPG_JS8A_OBJS)
 
 size:
