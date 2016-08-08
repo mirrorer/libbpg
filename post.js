@@ -113,7 +113,9 @@ loadData: function(array)
                 p0 = (p0 + 1) | 0;
             }
         }
-        frames[frame_count++] = { 'img': cimg, 'duration': duration };
+        var frame_index = frame_count++;
+        var frame = frames[frame_index] = { 'img': cimg, 'duration': duration };
+        if(this.onframe) this.onframe(frame_index, frame);
 
         setTimeout(continue_loading, this.decode_delay || 0)
     }.bind(this);
