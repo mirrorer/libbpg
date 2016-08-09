@@ -66,7 +66,7 @@ load: function(url)
 loadData: function(array)
 {
     var img, w, h, img_info_buf, cimg, p0, rgba_line, w4, frame_count;
-    var heap8, heap16, heap32, dst, v, i, y, func, duration, frames, loop_count;
+    var heap8, heap16, heap32, frames, loop_count;
 
     //    console.log("loaded " + data.byteLength + " bytes");
 
@@ -95,6 +95,8 @@ loadData: function(array)
     frames = [];
 
     var continue_decoding = function () {
+        var i, duration, y, dst;
+
         /* select RGBA32 output */
         if (this.bpg_decoder_start(img, 1) < 0)
             return finish_loading();
@@ -106,12 +108,10 @@ loadData: function(array)
         cimg = this.ctx.createImageData(w, h);
         dst = cimg.data;
         p0 = 0;
-        for(y = 0; y < h; y++) {
+        for(y = 0; y < h; y = (y + 1) | 0) {
             this.bpg_decoder_get_line(img, rgba_line);
-            for(i = 0; i < w4; i = (i + 1) | 0) {
-                dst[p0] = heap8[(rgba_line + i) | 0] | 0;
-                p0 = (p0 + 1) | 0;
-            }
+            dst.set(heap8.subarray(rgba_line, rgba_line + w4), p0); // MUCH faster than copying element-by-element.
+            p0 = (p0 + w4) | 0;
         }
         var frame_index = frame_count++;
         var frame = frames[frame_index] = { 'img': cimg, 'duration': duration };
