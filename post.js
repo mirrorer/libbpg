@@ -94,7 +94,7 @@ loadData: function(array)
     frame_count = 0;
     frames = [];
 
-    var continue_loading = function () {
+    var continue_decoding = function () {
         /* select RGBA32 output */
         if (this.bpg_decoder_start(img, 1) < 0)
             return finish_loading();
@@ -115,9 +115,18 @@ loadData: function(array)
         }
         var frame_index = frame_count++;
         var frame = frames[frame_index] = { 'img': cimg, 'duration': duration };
-        if(this.onframe) this.onframe(frame_index, frame);
+        var schedule_next_frame = true;
+        if (this.onframe) {
+            schedule_next_frame = this.onframe({
+                frame_index: frame_index,
+                frame: frame,
+                continue_decoding: continue_decoding,
+                array_length: array.length
+            }) !== false;
+        }
 
-        setTimeout(continue_loading, this.decode_delay || 0)
+        if (schedule_next_frame)
+            setTimeout(continue_decoding, this.decode_delay || 0);
     }.bind(this);
 
     var finish_loading = function () {
@@ -134,7 +143,7 @@ loadData: function(array)
             this['onload']();
     }.bind(this);
 
-    continue_loading();
+    continue_decoding();
 }
 
 };
