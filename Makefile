@@ -1,5 +1,5 @@
 # libbpg Makefile
-# 
+#
 # Compile options:
 #
 # Enable compilation of Javascript decoder with Emscripten
@@ -41,6 +41,7 @@ PWD:=$(shell pwd)
 CFLAGS:=-Os -Wall -MMD -fno-asynchronous-unwind-tables -fdata-sections -ffunction-sections -fno-math-errno -fno-signed-zeros -fno-tree-vectorize -fomit-frame-pointer
 CFLAGS+=-D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_REENTRANT
 CFLAGS+=-I.
+CFLAGS+=-I/usr/local/include
 CFLAGS+=-DCONFIG_BPG_VERSION=\"$(shell cat VERSION)\"
 ifdef USE_JCTVC_HIGH_BIT_DEPTH
 CFLAGS+=-DRExt__HIGH_BIT_DEPTH_SUPPORT
@@ -48,8 +49,8 @@ endif
 
 # Emscriptem config
 EMLDFLAGS:=-s "EXPORTED_FUNCTIONS=['_bpg_decoder_open','_bpg_decoder_decode','_bpg_decoder_get_info','_bpg_decoder_start','_bpg_decoder_get_frame_duration','_bpg_decoder_get_line','_bpg_decoder_close','_malloc','_free']"
-EMLDFLAGS+=-s NO_FILESYSTEM=1 -s NO_BROWSER=1
-#EMLDFLAGS+=-O1 --pre-js pre.js --post-js post.js
+EMLDFLAGS+=-s NO_FILESYSTEM=1
+EMLDFLAGS+=-s TOTAL_MEMORY=33554432 -s TOTAL_STACK=33554432
 # Note: the closure compiler is disabled because it adds unwanted global symbols
 EMLDFLAGS+=-O3 --memory-init-file 0 --closure 0 --pre-js pre.js --post-js post.js
 EMCFLAGS:=$(CFLAGS)
@@ -60,6 +61,7 @@ LDFLAGS+=-Wl,-dead_strip
 else
 LDFLAGS+=-Wl,--gc-sections
 endif
+LDFLAGS+=-L /usr/local/lib
 CFLAGS+=-g
 CXXFLAGS=$(CFLAGS)
 
@@ -151,7 +153,7 @@ ContextModel.o TComSampleAdaptiveOffset.o SEI.o TComPrediction.o\
 TComDataCU.o TComChromaFormat.o Debug.o TComRom.o\
 TComPicYuvMD5.o TComRdCost.o TComPattern.o TComCABACTables.o)
 JCTVC_OBJS+=jctvc/libmd5/libmd5.o
-JCTVC_OBJS+=jctvc/TAppEncCfg.o jctvc/TAppEncTop.o jctvc/program_options_lite.o 
+JCTVC_OBJS+=jctvc/TAppEncCfg.o jctvc/TAppEncTop.o jctvc/program_options_lite.o
 
 $(JCTVC_OBJS) jctvc_glue.o: CFLAGS+=-I$(PWD)/jctvc -Wno-sign-compare
 
@@ -176,7 +178,7 @@ ifdef CONFIG_APPLE
 LIBS:=
 else
 LIBS:=-lrt
-endif # !CONFIG_APPLE 
+endif # !CONFIG_APPLE
 LIBS+=-lm -lpthread
 
 BPGDEC_LIBS:=-lpng $(LIBS)
@@ -187,7 +189,7 @@ endif #!CONFIG_WIN32
 
 bpgenc.o: CFLAGS+=-Wno-unused-but-set-variable
 
-libbpg.a: $(LIBBPG_OBJS) 
+libbpg.a: $(LIBBPG_OBJS)
 	$(AR) rcs $@ $^
 
 bpgdec$(EXE): bpgdec.o libbpg.a
@@ -199,21 +201,21 @@ bpgenc$(EXE): $(BPGENC_OBJS)
 bpgview$(EXE): bpgview.o libbpg.a
 	$(CC) $(LDFLAGS) -o $@ $^ $(BPGVIEW_LIBS)
 
-bpgdec.js: $(LIBBPG_JS_OBJS) post.js
-	$(EMCC) $(EMLDFLAGS) -s TOTAL_MEMORY=33554432 -o $@ $(LIBBPG_JS_OBJS)
+bpgdec.js: $(LIBBPG_JS_OBJS) pre.js post.js
+	$(EMCC) $(EMLDFLAGS) -o $@ $(LIBBPG_JS_OBJS)
 
-bpgdec8.js: $(LIBBPG_JS8_OBJS) post.js
-	$(EMCC) $(EMLDFLAGS) -s TOTAL_MEMORY=33554432 -o $@ $(LIBBPG_JS8_OBJS)
+bpgdec8.js: $(LIBBPG_JS8_OBJS) pre.js post.js
+	$(EMCC) $(EMLDFLAGS) -o $@ $(LIBBPG_JS8_OBJS)
 
-bpgdec8a.js: $(LIBBPG_JS8A_OBJS) post.js
-	$(EMCC) $(EMLDFLAGS) -s TOTAL_MEMORY=33554432 -o $@ $(LIBBPG_JS8A_OBJS)
+bpgdec8a.js: $(LIBBPG_JS8A_OBJS) pre.js post.js
+	$(EMCC) $(EMLDFLAGS) -o $@ $(LIBBPG_JS8A_OBJS)
 
 size:
 	strip bpgdec
 	size bpgdec libbpg.o libavcodec/*.o libavutil/*.o | sort -n
 	gzip < bpgdec | wc
 
-install: bpgenc bpgdec
+install: $(PROGS)
 	install -s -m 755 $^ $(prefix)/bin
 
 CLEAN_DIRS=doc html libavcodec libavutil \

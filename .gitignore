@@ -1,0 +1,11 @@
+*.a
+*.o
+*.d
+*~
+bpgdec
+bpgview
+bpgenc
+bpgdec.js
+bpgdec8.js
+bpgdec8a.js
+*.out/
