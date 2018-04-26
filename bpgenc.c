@@ -688,6 +688,14 @@ Image *image_alloc(int w, int h, BPGImageFormatEnum format, int has_alpha,
 {
     Image *img;
     int i, linesize, w1, h1, c_count;
+    uint64_t size;
+
+    /* XXX: support large images ? */
+    size = (uint64_t)w * (uint64_t)h * 2;
+    if (size > INT32_MAX) {
+        fprintf(stderr, "Image is too large\n");
+        exit(1);
+    }
 
     img = malloc(sizeof(Image));
     memset(img, 0, sizeof(*img));
@@ -1088,7 +1096,7 @@ Image *read_png(BPGMetaData **pmd,
 
 static BPGMetaData *jpeg_get_metadata(jpeg_saved_marker_ptr first_marker)
 {
-    static const char app1_exif[] = "Exif";
+    static const char app1_exif[] = "Exif\0";
     static const char app1_xmp[] = "http://ns.adobe.com/xap/1.0/";
     static const char app2_iccp[] = "ICC_PROFILE";
     jpeg_saved_marker_ptr marker;
