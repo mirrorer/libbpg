@@ -232,7 +232,7 @@ static int build_msps(uint8_t **pbuf, int *pbuf_len,
     input_data += len;
     input_data_len -= len;
     
-    buf_len = 4 + 2 + msps_len * 2 + 4 + (input_data_len - len);
+    buf_len = 4 + 2 + msps_len * 2;
     buf = av_malloc(buf_len);
 
     idx = 0;
