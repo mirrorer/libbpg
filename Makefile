@@ -181,7 +181,12 @@ LIBS+=-lm -lpthread
 
 BPGDEC_LIBS:=-lpng $(LIBS)
 BPGENC_LIBS+=-lpng -ljpeg $(LIBS)
+
+ifdef CONFIG_APPLE
+BPGVIEW_LIBS:=-lSDLmain -Wl,-framework,Cocoa -lSDL_image -lSDL $(LIBS)
+else
 BPGVIEW_LIBS:=-lSDL_image -lSDL $(LIBS)
+endif # CONFIG_APPLE
 
 endif #!CONFIG_WIN32
 
@@ -214,7 +219,11 @@ size:
 	gzip < bpgdec | wc
 
 install: bpgenc bpgdec
-	install -s -m 755 $^ $(prefix)/bin
+	install -s -m 755 -p $^ $(prefix)/bin
+	install -m 644 -p libbpg.a $(prefix)/lib
+ifdef USE_BPGVIEW
+	install -s -m 755 bpgview $(prefix)/bin
+endif # USE_BPGVIEW
 
 CLEAN_DIRS=doc html libavcodec libavutil \
      jctvc jctvc/TLibEncoder jctvc/TLibVideoIO jctvc/TLibCommon jctvc/libmd5
