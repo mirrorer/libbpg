@@ -21,7 +21,7 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-window['BPGDecoder'] = function(ctx) {
+exports['BPGDecoder'] = function(ctx) {
     this.ctx = ctx;
     this['imageData'] = null;
     this['onload'] = null;
@@ -29,7 +29,7 @@ window['BPGDecoder'] = function(ctx) {
     this['loop_count'] = 0;
 }
 
-window['BPGDecoder'].prototype = {
+exports['BPGDecoder'].prototype = {
 
 malloc: Module['cwrap']('malloc', 'number', [ 'number' ]),
 
@@ -49,25 +49,24 @@ bpg_decoder_get_line: Module['cwrap']('bpg_decoder_get_line', 'number', [ 'numbe
 
 bpg_decoder_close: Module['cwrap']('bpg_decoder_close', 'void', [ 'number' ] ),
 
-load: function(url) 
+load: function(url)
 {
     var request = new XMLHttpRequest();
-    var this1 = this;
 
     request.open("get", url, true);
     request.responseType = "arraybuffer";
     request.onload = function(event) {
-        this1._onload(request, event);
-    };
+        var data = request.response;
+        var array = new Uint8Array(data);
+        this.loadData(array);
+    }.bind(this);
     request.send();
 },
 
-_onload: function(request, event)
+loadData: function(array)
 {
-    var data = request.response;
-    var array = new Uint8Array(data);
     var img, w, h, img_info_buf, cimg, p0, rgba_line, w4, frame_count;
-    var heap8, heap16, heap32, dst, v, i, y, func, duration, frames, loop_count;
+    var heap8, heap16, heap32, frames, loop_count;
 
     //    console.log("loaded " + data.byteLength + " bytes");
 
@@ -77,7 +76,7 @@ _onload: function(request, event)
         console.log("could not decode image");
         return;
     }
-    
+
     img_info_buf = this.malloc(5 * 4);
     this.bpg_decoder_get_info(img, img_info_buf);
     /* extract the image info */
@@ -88,49 +87,68 @@ _onload: function(request, event)
     h = heap32[(img_info_buf + 4) >> 2];
     loop_count = heap16[(img_info_buf + 16) >> 1];
     //    console.log("image: w=" + w + " h=" + h + " loop_count=" + loop_count);
-    
+
     w4 = w * 4;
     rgba_line = this.malloc(w4);
 
     frame_count = 0;
     frames = [];
-    for(;;) {
+
+    var continue_decoding = function () {
+        var i, duration, y, dst;
+
         /* select RGBA32 output */
         if (this.bpg_decoder_start(img, 1) < 0)
-            break;
-        this.bpg_decoder_get_frame_duration(img, img_info_buf, 
+            return finish_loading();
+
+        this.bpg_decoder_get_frame_duration(img, img_info_buf,
                                             img_info_buf + 4);
         duration = (heap32[img_info_buf >> 2] * 1000) / heap32[(img_info_buf + 4) >> 2];
 
         cimg = this.ctx.createImageData(w, h);
         dst = cimg.data;
         p0 = 0;
-        for(y = 0; y < h; y++) {
+        for(y = 0; y < h; y = (y + 1) | 0) {
             this.bpg_decoder_get_line(img, rgba_line);
-            for(i = 0; i < w4; i = (i + 1) | 0) {
-                dst[p0] = heap8[(rgba_line + i) | 0] | 0;
-                p0 = (p0 + 1) | 0;
-            }
+            dst.set(heap8.subarray(rgba_line, rgba_line + w4), p0); // MUCH faster than copying element-by-element.
+            p0 = (p0 + w4) | 0;
         }
-        frames[frame_count++] = { 'img': cimg, 'duration': duration };
-    }
+        var frame_index = frame_count++;
+        var frame = frames[frame_index] = { 'img': cimg, 'duration': duration };
+        var schedule_next_frame = true;
+        if (this.onframe) {
+            schedule_next_frame = this.onframe({
+                frame_index: frame_index,
+                frame: frame,
+                continue_decoding: continue_decoding,
+                array_length: array.length
+            }) !== false;
+        }
 
-    this.free(rgba_line);
-    this.free(img_info_buf);
+        if (schedule_next_frame)
+            setTimeout(continue_decoding, this.decode_delay || 0);
+    }.bind(this);
 
-    this.bpg_decoder_close(img);
+    var finish_loading = function () {
+        this.free(rgba_line);
+        this.free(img_info_buf);
 
-    this['loop_count'] = loop_count;
-    this['frames'] = frames;
-    this['imageData'] = frames[0]['img'];
+        this.bpg_decoder_close(img);
 
-    if (this['onload'])
-        this['onload']();
+        this['loop_count'] = loop_count;
+        this['frames'] = frames;
+        this['imageData'] = frames[0]['img'];
+
+        if (this['onload'])
+            this['onload']();
+    }.bind(this);
+
+    continue_decoding();
 }
 
 };
 
-window.onload = function() { 
+exports.onload = function() {
     var i, n, el, tab, tab1, url, dec, canvas, id, style, ctx, dw, dh;
 
     /* put all images to load in a separate array */
@@ -177,7 +195,7 @@ window.onload = function() {
             var imageData = frames[0]['img'];
             function next_frame() {
                 var frame_index = dec.frame_index;
-                
+
                 /* compute next frame index */
                 if (++frame_index >= frames.length) {
                     if (dec['loop_count'] == 0 ||
@@ -214,4 +232,4 @@ window.onload = function() {
 };
 
 /* end of dummy function enclosing all the emscripten code */
-})();
+})(this);
