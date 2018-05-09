@@ -95,6 +95,13 @@ static int jctvc_close(HEVCEncoderContext *s, uint8_t **pbuf)
     argc = 0;
     add_opt(&argc, argv, "jctvc"); /* dummy executable name */
 
+    fprintf( stdout, "\n" );
+    fprintf( stdout, "HM software: Encoder Version [%s] (including RExt)", NV_VERSION );
+    fprintf( stdout, NVM_ONOS );
+    fprintf( stdout, NVM_COMPILEDBY );
+    fprintf( stdout, NVM_BITS );
+    fprintf( stdout, "\n\n" );
+    
     snprintf(buf, sizeof(buf),"--InputFile=%s", s->infilename);
     add_opt(&argc, argv, buf);
     snprintf(buf, sizeof(buf),"--BitstreamFile=%s", s->outfilename);
@@ -134,7 +141,7 @@ static int jctvc_close(HEVCEncoderContext *s, uint8_t **pbuf)
     add_opt(&argc, argv, buf);
     
     if (!s->params.verbose)
-      add_opt(&argc, argv, "--Verbose=0");
+      add_opt(&argc, argv, "--SummaryVerboseness");
       
     /* single frame */
     snprintf(buf, sizeof(buf),"--FramesToBeEncoded=%d", s->frame_count);
@@ -184,13 +191,18 @@ static int jctvc_close(HEVCEncoderContext *s, uint8_t **pbuf)
     }
 
     if (s->params.lossless) {
+        if (s->params.chroma_format == BPG_FORMAT_420 || s->params.chroma_format == BPG_FORMAT_422) {
+            add_opt(&argc, argv, "--ChromaFormatIDC=444");
+            add_opt(&argc, argv, "--CrossComponentPrediction=1");
+        }
+        s->params.chroma_format = BPG_FORMAT_444;
         add_opt(&argc, argv, "--CostMode=lossless");
         add_opt(&argc, argv, "--SAO=0");
         add_opt(&argc, argv, "--LoopFilterDisable");
         add_opt(&argc, argv, "--TransquantBypassEnableFlag");
         add_opt(&argc, argv, "--CUTransquantBypassFlagForce");
-        add_opt(&argc, argv, "--ImplicitResidualDPCM");
-        add_opt(&argc, argv, "--GolombRiceParameterAdaptation");
+//        add_opt(&argc, argv, "--ImplicitResidualDPCM");
+//        add_opt(&argc, argv, "--GolombRiceParameterAdaptation");
         add_opt(&argc, argv, "--HadamardME=0");
     }
 
