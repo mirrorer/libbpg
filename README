@@ -27,31 +27,39 @@ BPG Image library and utilities
 2.1) Linux
 ----------
 
-  - Edit the Makefile to change the compile options (the default
+- Edit the Makefile to change the compile options (the default
   compile options should be OK). Type 'make' to compile and 'make
   install' to install the compiled binaries.
  
-  - Use 'make -j N' where N is the number of CPU cores to compile faster.
+- Use 'make -j N' where N is the number of CPU cores to compile faster.
 
-  - The following packages must be installed: SDL-devel
+- The following packages must be installed: SDL-devel
   SDL_image-devel yasm. It is recommended to use yasm version >= 1.3.0
   to have a faster compilation.
  
-  - Only a 64 bit target is supported because x265 needs it for bit
-    depths > 8.
+- Only a 64 bit target is supported because x265 needs it for bit
+  depths > 8.
 
 2.2) Windows
 ------------
 
-  - Only cross-compilation from Linux is supported.
+- Only cross-compilation from Linux is supported.
 
-  - The following packages need to be installed: mingw64-gcc
-    mingw64-libpng mingw64-libjpeg-turbo mingw64-SDL mingw64-SDL_image
-    yasm. It is recommended to use yasm version >= 1.3.0 to have a
-    faster compilation.
+- The following packages need to be installed: mingw64-gcc
+  mingw64-libpng mingw64-libjpeg-turbo mingw64-SDL mingw64-SDL_image
+  yasm. It is recommended to use yasm version >= 1.3.0 to have a
+  faster compilation.
 
-  - Only a 64 bit target is supported because x265 needs it for bit
-    depths > 8.
+- Only a 64 bit target is supported because x265 needs it for bit
+  depths > 8.
+
+2.3) macOS
+----------
+
+On macOS libpng can be installed by using Homebrew with the following
+command:
+
+  brew install libpng
 
 3) BPG encoder
 --------------
