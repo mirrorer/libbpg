@@ -56,10 +56,10 @@ BPG Image library and utilities
 2.3) macOS
 ----------
 
-On macOS libpng can be installed by using Homebrew with the following
+On macOS libbpg can be installed by using Homebrew with the following
 command:
 
-  brew install libpng
+  brew install libbpg
 
 3) BPG encoder
 --------------
