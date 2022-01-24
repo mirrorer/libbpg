@@ -95,7 +95,7 @@ int save_bpg_image(DecodedImage *decoded_image, char *outfilename, int qp,
 
 int save_bpg_image_with_defaults(DecodedImage *decoded_image){
     save_bpg_image(decoded_image, DEFAULT_OUTFILENAME, DEFAULT_QP, 
-        DEFAULT_LOSSLESS, DEFAULT_COMPRESS_LEVEL, DEFAULT_PREFFERED_CHROMA_FORMAT);
+        DEFAULT_LOSSLESS, DEFAULT_COMPRESS_LEVEL, DEFAULT_PREFERRED_CHROMA_FORMAT);
     
     return 0;
 }
