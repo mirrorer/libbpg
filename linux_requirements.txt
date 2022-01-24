@@ -1,0 +1,1 @@
+Sudo apt install make cmake gcc g++ yasm  python3-pyqt5 qttools5-dev-tools binutils-mingw-w64-x86-64 g++-mingw-w64-x86-64 pip git libpng-dev libjpeg-dev libsdl-dev libsdl-image1.2-dev 

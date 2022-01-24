@@ -38,26 +38,36 @@
 #include <png.h>
 #include <string.h>
 #include "libbpg.h"
+#include "bpgdec.h"
 
 static int ** get_image_array(BPGDecoderContext *img)
 {
     int ** image_array;
     BPGImageInfo img_info_s, *img_info = &img_info_s;
     FILE *f;
-    int w, h, y;
+    int w, h, y, alpha;
     uint8_t *rgb_line;
+    BPGDecoderOutputFormat out_fmt;
 
     bpg_decoder_get_info(img, img_info);
     
     w = img_info->width;
     h = img_info->height;
+    alpha = img_info->has_alpha;
+
+    int pixel_len = 3;
+    out_fmt = BPG_OUTPUT_FORMAT_RGB24;
+    if (alpha){
+        pixel_len = 4;
+        out_fmt = BPG_OUTPUT_FORMAT_RGBA32;
+    }
 
     image_array = malloc(h * sizeof( int * ));
     for (y = 0; y < h; y++) {
-        image_array[y] = malloc(3 * w * sizeof( int ));
+        image_array[y] = malloc(pixel_len * w * sizeof( int ));
     }
     
-    rgb_line = malloc(3 * w);    
+    rgb_line = malloc(pixel_len * w);    
 
     // dane w nagłówku PPM:
     // P6 - ze to PPM;  wymiarach obrazka w i h
@@ -65,7 +75,7 @@ static int ** get_image_array(BPGDecoderContext *img)
     // fprintf(f, "P6\n%d %d\n%d\n", w, h, 255);
 
     // obraz wlasciwy
-    bpg_decoder_start(img, BPG_OUTPUT_FORMAT_RGB24);
+    bpg_decoder_start(img, out_fmt);
     for (y = 0; y < h; y++) {
             // printf("will do malloc\n");
         // image_array[y] = malloc(3 * w);
@@ -74,7 +84,7 @@ static int ** get_image_array(BPGDecoderContext *img)
             // printf("image next row getted\n");
         // int rgb_line_len = sizeof(rgb_line)/sizeof(rgb_line[0]);
         // int rgb_line_len = sizeof(rgb_line);
-        for(int i=0; i<3*w; i++){
+        for(int i=0; i<pixel_len*w; i++){
             image_array[y][i] = rgb_line[i];
         }
             // printf("\nnext line: %d\n", y);
@@ -427,19 +437,21 @@ static void help(void)
 //     return 0;
 // }
 
-int ** get_array(){
+DecodedImage get_array(char *filename){
     FILE *f;
     BPGDecoderContext *img;
     uint8_t *buf;
     int buf_len, bit_depth, c, show_info;
-    const char *outfilename, *filename, *p;
+    //const char *outfilename, *filename, *p;
+    const char *p;
     
     bit_depth = 8;
     show_info = 0;
 
+    // filename = filename_arg[optind++];
     // filename = argv[optind++];
     // filename = "sample-ycbcr-444.bpg";
-    filename = "sample-rgb-444.bpg";
+    // filename = "sample-rgb-444.bpg";
     // filename = "bridge.bpg";
 
     f = fopen(filename, "rb");
@@ -481,8 +493,12 @@ int ** get_array(){
         // ppm_save(img, outfilename);
 //     }
     BPGImageInfo img_info_s, *img_info = &img_info_s;
+    bpg_decoder_get_info(img, img_info);
     int w = img_info->width;
     int h = img_info->height;
+    int alpha = img_info->has_alpha;
+
+    fprintf;
 
     int **image_array_returned = get_image_array(img);
     // int imagearray_getted = get_image_array(img, outfilename);
@@ -490,7 +506,14 @@ int ** get_array(){
 
     bpg_decoder_close(img);
 
-    return image_array_returned;
+    DecodedImage array_image_return;
+    array_image_return.image_array = image_array_returned;
+    array_image_return.w = w;
+    array_image_return.h = h;
+    array_image_return.has_alpha = alpha;
+
+
+    return array_image_return;
 }
 
 // int main(){
