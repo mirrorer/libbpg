@@ -11,7 +11,7 @@ static int write_func(void *opaque, const uint8_t *buf, int buf_len)
 }
 
 int save_bpg_image(DecodedImage *decoded_image, char *outfilename, int qp, 
-                int lossless, int compress_level, int preffered_chroma_format){  
+                int lossless, int compress_level, int preferred_chroma_format){  
     if (qp < 0 || qp > 51){
         fprintf(stderr, "qp must be between 0 and 51\n");
         exit(1);
@@ -24,8 +24,8 @@ int save_bpg_image(DecodedImage *decoded_image, char *outfilename, int qp,
         fprintf(stderr, "compress_level must be between 1 and 9\n");
         exit(1);
     }
-    if (preffered_chroma_format != 420 && preffered_chroma_format != 422 && preffered_chroma_format != 444){
-        fprintf(stderr, "preffered_chroma_format must be 420, 422 or 444\n");
+    if (preferred_chroma_format != 420 && preferred_chroma_format != 422 && preferred_chroma_format != 444){
+        fprintf(stderr, "preferred_chroma_format must be 420, 422 or 444\n");
         exit(1);
     }
 
@@ -48,7 +48,7 @@ int save_bpg_image(DecodedImage *decoded_image, char *outfilename, int qp,
     }
     
 
-    switch (preffered_chroma_format)
+    switch (preferred_chroma_format)
     {
     case 420:
         p->preferred_chroma_format = BPG_FORMAT_420;

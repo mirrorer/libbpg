@@ -21,7 +21,7 @@ typedef struct DecodedImage
 DecodedImage load_bpg_image(char *filename);
 
 int save_bpg_image(DecodedImage *decoded_image, char *outfilename, int qp, 
-                int lossless, int compress_level, int preffered_chroma_format);
+                int lossless, int compress_level, int preferred_chroma_format);
 
 int save_bpg_image_with_defaults(DecodedImage *decoded_image);
 
