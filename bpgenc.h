@@ -26,6 +26,7 @@ extern "C" {
 #endif
 
 #include "libbpg.h"
+#include "libbpg.h"
 
 typedef struct {
     int w, h;
@@ -72,6 +73,17 @@ int x265_encode_picture(uint8_t **pbuf, Image *img,
                         const HEVCEncodeParams *params);
 void save_yuv1(Image *img, FILE *f);
 void save_yuv(Image *img, const char *filename);
+
+typedef struct DecodedImage
+{
+    int w, h, has_alpha, is_grayscale;
+    int ** image_array;
+} DecodedImage;
+
+int save_bpg_image(DecodedImage *decoded_image, char *outfilename, int qp, 
+                int lossless, int compress_level, int preffered_chroma_format);
+
+int save_bpg_image_with_defaults(DecodedImage *decoded_image);
 
 #ifdef __cplusplus
 }
