@@ -26,7 +26,6 @@ extern "C" {
 #endif
 
 #include "libbpg.h"
-#include "bpgdec.h"
 
 typedef struct {
     int w, h;

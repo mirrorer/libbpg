@@ -135,6 +135,4 @@ int bpg_decoder_get_info_from_buf(BPGImageInfo *p,
 /* Free the extension data returned by bpg_decoder_get_info_from_buf() */
 void bpg_decoder_free_extension_data(BPGExtensionData *first_md);
 
-int bpg_decoder_get_w(BPGDecoderContext *img);
-
 #endif /* _LIBBPG_H */

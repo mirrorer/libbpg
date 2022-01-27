@@ -1464,9 +1464,9 @@ int bpg_decoder_start(BPGDecoderContext *s, BPGDecoderOutputFormat out_fmt)
     if (s->format != BPG_FORMAT_GRAY) {
         s->cb_buf = bpg_decoder_get_data(s, &s->cb_linesize, 1);
         s->cr_buf = bpg_decoder_get_data(s, &s->cr_linesize, 2);
-        c_idx = 3; //czyli Y
+        c_idx = 3;
     } else {
-        c_idx = 1; //czyli Y
+        c_idx = 1;
     }
     if (s->has_alpha)
         s->a_buf = bpg_decoder_get_data(s, &s->a_linesize, c_idx);
@@ -1955,12 +1955,4 @@ int bpg_decoder_get_info_from_buf(BPGImageInfo *p,
         *pfirst_md = h->first_md;
     return 0;
 }
-
-int bpg_decoder_get_w(BPGDecoderContext *img)
-{
-    if (!img->frame)
-        return -1;
-    return img->w;;
-}
-
 #endif

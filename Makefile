@@ -1,4 +1,3 @@
-# bpgend
 # libbpg Makefile
 # 
 # Compile options:
@@ -6,9 +5,9 @@
 # Enable compilation of Javascript decoder with Emscripten
 #USE_EMCC=y
 # Enable x265 for the encoder
-USE_X265=y
+# USE_X265=y
 # Enable the JCTVC code (best quality but slow) for the encoder
-#USE_JCTVC=y
+USE_JCTVC=y
 # Compile bpgview (SDL and SDL_image libraries needed)
 USE_BPGVIEW=y
 # Enable it to use bit depths > 12 (need more tests to validate encoder)
@@ -39,7 +38,7 @@ EMCC=emcc
 
 PWD:=$(shell pwd)
 
-CFLAGS:= -Os -Wall -MMD -fPIC -fno-asynchronous-unwind-tables -fdata-sections -ffunction-sections -fno-math-errno -fno-signed-zeros -fno-tree-vectorize -fomit-frame-pointer
+CFLAGS:=-Os -Wall -MMD -fno-asynchronous-unwind-tables -fdata-sections -ffunction-sections -fno-math-errno -fno-signed-zeros -fno-tree-vectorize -fomit-frame-pointer
 CFLAGS+=-D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_REENTRANT
 CFLAGS+=-I.
 CFLAGS+=-DCONFIG_BPG_VERSION=\"$(shell cat VERSION)\"
@@ -64,13 +63,12 @@ endif
 CFLAGS+=-g
 CXXFLAGS=$(CFLAGS)
 
-# PROGS=bpgdec$(EXE) bpgenc$(EXE)
-PROGS=bpgenc$(EXE)
+PROGS=bpgdec$(EXE) bpgenc$(EXE)
 ifdef USE_BPGVIEW
 PROGS+=bpgview$(EXE)
 endif
 ifdef USE_EMCC
-# PROGS+=bpgdec.js bpgdec8.js bpgdec8a.js
+PROGS+=bpgdec.js bpgdec8.js bpgdec8a.js
 endif
 
 all: $(PROGS)
@@ -155,20 +153,20 @@ TComPicYuvMD5.o TComRdCost.o TComPattern.o TComCABACTables.o)
 JCTVC_OBJS+=jctvc/libmd5/libmd5.o
 JCTVC_OBJS+=jctvc/TAppEncCfg.o jctvc/TAppEncTop.o jctvc/program_options_lite.o 
 
-$(JCTVC_OBJS) jctvc_glue.o: CFLAGS+=-I$(PWD)/jctvc -Wno-sign-compare
+$(JCTVC_OBJS) jctvc_glue.o: CFLAGS+= -fPIC -I$(PWD)/jctvc -Wno-sign-compare
 
 jctvc/libjctvc.a: $(JCTVC_OBJS)
 	$(AR) rcs $@ $^
 
 BPGENC_OBJS+=jctvc_glue.o jctvc/libjctvc.a
 
-bpgenc.o: CFLAGS+=-DUSE_JCTVC
+bpgenc.o: CFLAGS+=-DUSE_JCTVC -fPIC
 endif # USE_JCTVC
 
 
 ifdef CONFIG_WIN32
 
-# BPGDEC_LIBS:=-lpng -lz
+BPGDEC_LIBS:=-lpng -lz
 BPGENC_LIBS+=-lpng -ljpeg -lz
 BPGVIEW_LIBS:=-lmingw32 -lSDLmain -lSDL_image -lSDL -mwindows
 
@@ -181,7 +179,7 @@ LIBS:=-lrt
 endif # !CONFIG_APPLE 
 LIBS+=-lm -lpthread
 
-# BPGDEC_LIBS:=-lpng $(LIBS)
+BPGDEC_LIBS:=-lpng $(LIBS)
 BPGENC_LIBS+=-lpng -ljpeg $(LIBS)
 BPGVIEW_LIBS:=-lSDL_image -lSDL $(LIBS)
 
@@ -192,8 +190,8 @@ bpgenc.o: CFLAGS+=-Wno-unused-but-set-variable
 libbpg.a: $(LIBBPG_OBJS) 
 	$(AR) rcs $@ $^
 
-# bpgdec$(EXE): bpgdec.o libbpg.a
-# 	$(CC) $(LDFLAGS) -o $@ $^ $(BPGDEC_LIBS)
+bpgdec$(EXE): bpgdec.o libbpg.a
+	$(CC) $(LDFLAGS) -o $@ $^ $(BPGDEC_LIBS)
 
 bpgenc$(EXE): $(BPGENC_OBJS)
 	$(CXX) $(LDFLAGS) -o $@ $^ $(BPGENC_LIBS)
@@ -201,22 +199,22 @@ bpgenc$(EXE): $(BPGENC_OBJS)
 bpgview$(EXE): bpgview.o libbpg.a
 	$(CC) $(LDFLAGS) -o $@ $^ $(BPGVIEW_LIBS)
 
-# bpgdec.js: $(LIBBPG_JS_OBJS) post.js
-# 	$(EMCC) $(EMLDFLAGS) -s TOTAL_MEMORY=33554432 -o $@ $(LIBBPG_JS_OBJS)
+bpgdec.js: $(LIBBPG_JS_OBJS) post.js
+	$(EMCC) $(EMLDFLAGS) -s TOTAL_MEMORY=33554432 -o $@ $(LIBBPG_JS_OBJS)
 
-# bpgdec8.js: $(LIBBPG_JS8_OBJS) post.js
-# 	$(EMCC) $(EMLDFLAGS) -s TOTAL_MEMORY=33554432 -o $@ $(LIBBPG_JS8_OBJS)
+bpgdec8.js: $(LIBBPG_JS8_OBJS) post.js
+	$(EMCC) $(EMLDFLAGS) -s TOTAL_MEMORY=33554432 -o $@ $(LIBBPG_JS8_OBJS)
 
-# bpgdec8a.js: $(LIBBPG_JS8A_OBJS) post.js
-# 	$(EMCC) $(EMLDFLAGS) -s TOTAL_MEMORY=33554432 -o $@ $(LIBBPG_JS8A_OBJS)
+bpgdec8a.js: $(LIBBPG_JS8A_OBJS) post.js
+	$(EMCC) $(EMLDFLAGS) -s TOTAL_MEMORY=33554432 -o $@ $(LIBBPG_JS8A_OBJS)
 
-# size:
-# 	strip bpgdec
-# 	size bpgdec libbpg.o libavcodec/*.o libavutil/*.o | sort -n
-# 	gzip < bpgdec | wc
+size:
+	strip bpgdec
+	size bpgdec libbpg.o libavcodec/*.o libavutil/*.o | sort -n
+	gzip < bpgdec | wc
 
-# install: bpgenc bpgdec
-# 	install -s -m 755 $^ $(prefix)/bin
+install: bpgenc bpgdec
+	install -s -m 755 $^ $(prefix)/bin
 
 CLEAN_DIRS=doc html libavcodec libavutil \
      jctvc jctvc/TLibEncoder jctvc/TLibVideoIO jctvc/TLibCommon jctvc/libmd5
@@ -249,3 +247,6 @@ clean: x265_clean
 -include $(wildcard jctvc/TLibVideoIO/*.d)
 -include $(wildcard jctvc/TLibCommon/*.d)
 -include $(wildcard jctvc/libmd5/*.d)
+
+# and compile command like this:
+# g++ -shared -o bpg_load_save_lib.so bpg_load_save_lib.c libbpg.a

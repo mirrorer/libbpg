@@ -29,97 +29,14 @@
 #include <inttypes.h>
 
 /* define it to include PNG output */
-// #define USE_PNG
+#define USE_PNG
 
-// #ifdef USE_PNG
-// #include <png.h>
-// #endif
-
+#ifdef USE_PNG
 #include <png.h>
-#include <string.h>
+#endif
+
 #include "libbpg.h"
-#include "bpgdec.h"
 
-static int ** get_image_array(BPGDecoderContext *img)
-{
-    int ** image_array;
-    BPGImageInfo img_info_s, *img_info = &img_info_s;
-    FILE *f;
-    int w, h, y, alpha;
-    uint8_t *rgb_line;
-    BPGDecoderOutputFormat out_fmt;
-
-    bpg_decoder_get_info(img, img_info);
-    
-    w = img_info->width;
-    h = img_info->height;
-    alpha = img_info->has_alpha;
-
-    int pixel_len = 3;
-    out_fmt = BPG_OUTPUT_FORMAT_RGB24;
-    if (alpha){
-        pixel_len = 4;
-        out_fmt = BPG_OUTPUT_FORMAT_RGBA32;
-    }
-
-    image_array = malloc(h * sizeof( int * ));
-    for (y = 0; y < h; y++) {
-        image_array[y] = malloc(pixel_len * w * sizeof( int ));
-    }
-    
-    rgb_line = malloc(pixel_len * w);    
-
-    // dane w nagłówku PPM:
-    // P6 - ze to PPM;  wymiarach obrazka w i h
-    // maksymalna wartość składowa koloru 
-    // fprintf(f, "P6\n%d %d\n%d\n", w, h, 255);
-
-    // obraz wlasciwy
-    bpg_decoder_start(img, out_fmt);
-    for (y = 0; y < h; y++) {
-            // printf("will do malloc\n");
-        // image_array[y] = malloc(3 * w);
-            // printf("image next row allocated\n");
-        bpg_decoder_get_line(img, rgb_line);
-            // printf("image next row getted\n");
-        // int rgb_line_len = sizeof(rgb_line)/sizeof(rgb_line[0]);
-        // int rgb_line_len = sizeof(rgb_line);
-        for(int i=0; i<pixel_len*w; i++){
-            image_array[y][i] = rgb_line[i];
-        }
-            // printf("\nnext line: %d\n", y);
-
-        // fwrite(rgb_line, 1, w * 3, f);
-    }
-    // z save png: - zmienność formatu rgb_line
-    // if (bit_depth == 16) {
-    //     if (img_info->has_alpha)
-            // out_fmt = BPG_OUTPUT_FORMAT_RGBA64;
-    //     else
-    //         out_fmt = BPG_OUTPUT_FORMAT_RGB48;
-    // } else {
-    //     if (img_info->has_alpha)
-    //         out_fmt = BPG_OUTPUT_FORMAT_RGBA32;
-    //     else
-    //         out_fmt = BPG_OUTPUT_FORMAT_RGB24;
-    // }
-    //
-    // bpg_decoder_start(img, out_fmt);
-    //
-    // bpp = (3 + img_info->has_alpha) * (bit_depth / 8);
-    // row_pointer = (png_bytep)png_malloc(png_ptr, img_info->width * bpp);
-    // for (y = 0; y < img_info->height; y++) {
-    //     bpg_decoder_get_line(img, row_pointer);
-    //     png_write_row(png_ptr, row_pointer);
-    // }
-    
-        // printf("will free rgb_line\n");
-    free(rgb_line);
-        // printf("did free rgb_line\n");
-
-    printf("will return image\n");
-    return image_array;
-}
 static void ppm_save(BPGDecoderContext *img, const char *filename)
 {
     BPGImageInfo img_info_s, *img_info = &img_info_s;
@@ -152,103 +69,103 @@ static void ppm_save(BPGDecoderContext *img, const char *filename)
     free(rgb_line);
 }
 
-// #ifdef USE_PNG
-// static void png_write_data (png_structp png_ptr, png_bytep data,
-//                             png_size_t length)
-// {
-//     FILE *f;
-//     int ret;
+#ifdef USE_PNG
+static void png_write_data (png_structp png_ptr, png_bytep data,
+                            png_size_t length)
+{
+    FILE *f;
+    int ret;
 
-//     f = png_get_io_ptr(png_ptr);
-//     ret = fwrite(data, 1, length, f);
-//     if (ret != length)
-// 	png_error(png_ptr, "PNG Write Error");
-// }
+    f = png_get_io_ptr(png_ptr);
+    ret = fwrite(data, 1, length, f);
+    if (ret != length)
+	png_error(png_ptr, "PNG Write Error");
+}
 
-// static void png_save(BPGDecoderContext *img, const char *filename, int bit_depth)
-// {
-//     BPGImageInfo img_info_s, *img_info = &img_info_s;
-//     FILE *f;
-//     png_structp png_ptr;
-//     png_infop info_ptr;
-//     png_bytep row_pointer;
-//     int y, color_type, bpp;
-//     BPGDecoderOutputFormat out_fmt;
+static void png_save(BPGDecoderContext *img, const char *filename, int bit_depth)
+{
+    BPGImageInfo img_info_s, *img_info = &img_info_s;
+    FILE *f;
+    png_structp png_ptr;
+    png_infop info_ptr;
+    png_bytep row_pointer;
+    int y, color_type, bpp;
+    BPGDecoderOutputFormat out_fmt;
 
-//     if (bit_depth != 8 && bit_depth != 16) {
-//         fprintf(stderr, "Only bit_depth = 8 or 16 are supported for PNG output\n");
-//         exit(1);
-//     }
+    if (bit_depth != 8 && bit_depth != 16) {
+        fprintf(stderr, "Only bit_depth = 8 or 16 are supported for PNG output\n");
+        exit(1);
+    }
 
-//     bpg_decoder_get_info(img, img_info);
+    bpg_decoder_get_info(img, img_info);
 
-//     f = fopen(filename, "wb");
-//     if (!f) {
-//         fprintf(stderr, "%s: I/O error\n", filename);
-//         exit(1);
-//     }
+    f = fopen(filename, "wb");
+    if (!f) {
+        fprintf(stderr, "%s: I/O error\n", filename);
+        exit(1);
+    }
 
-//     png_ptr = png_create_write_struct_2(PNG_LIBPNG_VER_STRING,
-//                                         NULL,
-//                                         NULL,  /* error */
-//                                         NULL, /* warning */
-//                                         NULL,
-//                                         NULL,
-//                                         NULL);
-//     info_ptr = png_create_info_struct(png_ptr);
-//     png_set_write_fn(png_ptr, (png_voidp)f, &png_write_data, NULL);
+    png_ptr = png_create_write_struct_2(PNG_LIBPNG_VER_STRING,
+                                        NULL,
+                                        NULL,  /* error */
+                                        NULL, /* warning */
+                                        NULL,
+                                        NULL,
+                                        NULL);
+    info_ptr = png_create_info_struct(png_ptr);
+    png_set_write_fn(png_ptr, (png_voidp)f, &png_write_data, NULL);
 
-//     if (setjmp(png_jmpbuf(png_ptr)) != 0) {
-//         fprintf(stderr, "PNG write error\n");
-//         exit(1);
-//     }
+    if (setjmp(png_jmpbuf(png_ptr)) != 0) {
+        fprintf(stderr, "PNG write error\n");
+        exit(1);
+    }
 
-//     if (img_info->has_alpha)
-//         color_type = PNG_COLOR_TYPE_RGB_ALPHA;
-//     else
-//         color_type = PNG_COLOR_TYPE_RGB;
+    if (img_info->has_alpha)
+        color_type = PNG_COLOR_TYPE_RGB_ALPHA;
+    else
+        color_type = PNG_COLOR_TYPE_RGB;
         
-//     png_set_IHDR(png_ptr, info_ptr, img_info->width, img_info->height,
-//                  bit_depth, color_type, PNG_INTERLACE_NONE,
-//                  PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
+    png_set_IHDR(png_ptr, info_ptr, img_info->width, img_info->height,
+                 bit_depth, color_type, PNG_INTERLACE_NONE,
+                 PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
 
-//     png_write_info(png_ptr, info_ptr);
+    png_write_info(png_ptr, info_ptr);
 
-// #if __BYTE_ORDER__ != __ORDER_BIG_ENDIAN__
-//     if (bit_depth == 16) {
-//         png_set_swap(png_ptr);
-//     }
-// #endif
+#if __BYTE_ORDER__ != __ORDER_BIG_ENDIAN__
+    if (bit_depth == 16) {
+        png_set_swap(png_ptr);
+    }
+#endif
     
-//     if (bit_depth == 16) {
-//         if (img_info->has_alpha)
-//             out_fmt = BPG_OUTPUT_FORMAT_RGBA64;
-//         else
-//             out_fmt = BPG_OUTPUT_FORMAT_RGB48;
-//     } else {
-//         if (img_info->has_alpha)
-//             out_fmt = BPG_OUTPUT_FORMAT_RGBA32;
-//         else
-//             out_fmt = BPG_OUTPUT_FORMAT_RGB24;
-//     }
+    if (bit_depth == 16) {
+        if (img_info->has_alpha)
+            out_fmt = BPG_OUTPUT_FORMAT_RGBA64;
+        else
+            out_fmt = BPG_OUTPUT_FORMAT_RGB48;
+    } else {
+        if (img_info->has_alpha)
+            out_fmt = BPG_OUTPUT_FORMAT_RGBA32;
+        else
+            out_fmt = BPG_OUTPUT_FORMAT_RGB24;
+    }
     
-//     bpg_decoder_start(img, out_fmt);
+    bpg_decoder_start(img, out_fmt);
 
-//     bpp = (3 + img_info->has_alpha) * (bit_depth / 8);
-//     row_pointer = (png_bytep)png_malloc(png_ptr, img_info->width * bpp);
-//     for (y = 0; y < img_info->height; y++) {
-//         bpg_decoder_get_line(img, row_pointer);
-//         png_write_row(png_ptr, row_pointer);
-//     }
-//     png_free(png_ptr, row_pointer);
+    bpp = (3 + img_info->has_alpha) * (bit_depth / 8);
+    row_pointer = (png_bytep)png_malloc(png_ptr, img_info->width * bpp);
+    for (y = 0; y < img_info->height; y++) {
+        bpg_decoder_get_line(img, row_pointer);
+        png_write_row(png_ptr, row_pointer);
+    }
+    png_free(png_ptr, row_pointer);
     
-//     png_write_end(png_ptr, NULL);
+    png_write_end(png_ptr, NULL);
     
-//     png_destroy_write_struct(&png_ptr, &info_ptr);
+    png_destroy_write_struct(&png_ptr, &info_ptr);
 
-//     fclose(f);
-// }
-// #endif /* USE_PNG */
+    fclose(f);
+}
+#endif /* USE_PNG */
 
 static void bpg_show_info(const char *filename, int show_extensions)
 {
@@ -339,120 +256,58 @@ static void bpg_show_info(const char *filename, int show_extensions)
 
 static void help(void)
 {
-    printf("there is no help :P\n");
-    // printf("BPG Image Decoder version " CONFIG_BPG_VERSION "\n"
-    //        "usage: bpgdec [options] infile\n"
-    //        "Options:\n"
-    //        "-o outfile.[ppm|png]   set the output filename (default = out.png)\n"
-    //        "-b bit_depth           PNG output only: use bit_depth per component (8 or 16, default = 8)\n"
-    //        "-i                     display information about the image\n");
+    printf("BPG Image Decoder version " CONFIG_BPG_VERSION "\n"
+           "usage: bpgdec [options] infile\n"
+           "Options:\n"
+           "-o outfile.[ppm|png]   set the output filename (default = out.png)\n"
+           "-b bit_depth           PNG output only: use bit_depth per component (8 or 16, default = 8)\n"
+           "-i                     display information about the image\n");
     exit(1);
 }
 
-// int main(int argc, char **argv)
-// {
-//     FILE *f;
-//     BPGDecoderContext *img;
-//     uint8_t *buf;
-//     int buf_len, bit_depth, c, show_info;
-//     const char *outfilename, *filename, *p;
-//    
-//     outfilename = "out.png";
-//     bit_depth = 8;
-//     show_info = 0;
-//     for(;;) {
-//         c = getopt(argc, argv, "ho:b:i");
-//         if (c == -1)
-//             break;
-//         switch(c) {
-//         case 'h':
-//         show_help:
-//             help();
-//             break;
-//         case 'o':
-//             outfilename = optarg;
-//             break;
-//         case 'b':
-//             bit_depth = atoi(optarg);
-//             break;
-//         case 'i':
-//             show_info = 1;
-//             break;
-//         default:
-//             exit(1);
-//         }
-//     }
-//
-//     if (optind >= argc)
-//         goto show_help;
-//
-//     filename = argv[optind++];
-//
-//     if (show_info) {
-//         bpg_show_info(filename, 1);
-//         return 0;
-//     }
-//
-//     f = fopen(filename, "rb");
-//     if (!f) {
-//         fprintf(stderr, "Could not open %s\n", filename);
-//         exit(1);
-//     }
-//
-//     fseek(f, 0, SEEK_END);
-//     buf_len = ftell(f);
-//     fseek(f, 0, SEEK_SET);
-//
-//     buf = malloc(buf_len);
-//     if (fread(buf, 1, buf_len, f) != buf_len) {
-//         fprintf(stderr, "Error while reading file\n");
-//         exit(1);
-//     }
-//   
-//     fclose(f);
-//
-//     img = bpg_decoder_open();
-//
-//     if (bpg_decoder_decode(img, buf, buf_len) < 0) {
-//         fprintf(stderr, "Could not decode image\n");
-//         exit(1);
-//     }
-//     free(buf);
-//
-// #ifdef USE_PNG
-//     p = strrchr(outfilename, '.');
-//     if (p)
-//         p++;
-//
-//     if (p && strcasecmp(p, "ppm") != 0) {
-//         png_save(img, outfilename, bit_depth);
-//     } else 
-// #endif
-//     {
-//         ppm_save(img, outfilename);
-//     }
-//
-//     bpg_decoder_close(img);
-//
-//     return 0;
-// }
-
-DecodedImage get_array(char *filename){
+int main(int argc, char **argv)
+{
     FILE *f;
     BPGDecoderContext *img;
     uint8_t *buf;
     int buf_len, bit_depth, c, show_info;
-    //const char *outfilename, *filename, *p;
-    const char *p;
+    const char *outfilename, *filename, *p;
     
+    outfilename = "out.png";
     bit_depth = 8;
     show_info = 0;
+    for(;;) {
+        c = getopt(argc, argv, "ho:b:i");
+        if (c == -1)
+            break;
+        switch(c) {
+        case 'h':
+        show_help:
+            help();
+            break;
+        case 'o':
+            outfilename = optarg;
+            break;
+        case 'b':
+            bit_depth = atoi(optarg);
+            break;
+        case 'i':
+            show_info = 1;
+            break;
+        default:
+            exit(1);
+        }
+    }
 
-    // filename = filename_arg[optind++];
-    // filename = argv[optind++];
-    // filename = "sample-ycbcr-444.bpg";
-    // filename = "sample-rgb-444.bpg";
-    // filename = "bridge.bpg";
+    if (optind >= argc)
+        goto show_help;
+
+    filename = argv[optind++];
+
+    if (show_info) {
+        bpg_show_info(filename, 1);
+        return 0;
+    }
 
     f = fopen(filename, "rb");
     if (!f) {
@@ -480,50 +335,20 @@ DecodedImage get_array(char *filename){
     }
     free(buf);
 
-// #ifdef USE_PNG
-//     p = strrchr(outfilename, '.');
-//     if (p)
-//         p++;
+#ifdef USE_PNG
+    p = strrchr(outfilename, '.');
+    if (p)
+        p++;
 
-//     if (p && strcasecmp(p, "ppm") != 0) {
-        // png_save(img, outfilename, bit_depth);
-//     } else 
-// #endif
-//     {
-        // ppm_save(img, outfilename);
-//     }
-    BPGImageInfo img_info_s, *img_info = &img_info_s;
-    bpg_decoder_get_info(img, img_info);
-    int w = img_info->width;
-    int h = img_info->height;
-    int alpha = img_info->has_alpha;
-
-    fprintf;
-
-    int **image_array_returned = get_image_array(img);
-    // int imagearray_getted = get_image_array(img, outfilename);
-    // printf("w=%d\n", imagearray_getted[0][0]);
+    if (p && strcasecmp(p, "ppm") != 0) {
+        png_save(img, outfilename, bit_depth);
+    } else 
+#endif
+    {
+        ppm_save(img, outfilename);
+    }
 
     bpg_decoder_close(img);
 
-    DecodedImage array_image_return;
-    array_image_return.image_array = image_array_returned;
-    array_image_return.w = w;
-    array_image_return.h = h;
-    array_image_return.has_alpha = alpha;
-
-
-    return array_image_return;
+    return 0;
 }
-
-// int main(){
-//     int **returned_image = get_array();
-//     for(int i=0; i<10; i++){
-//         for(int j=0; j<10; j++){
-//             printf("%d ", returned_image[i][j]);
-//         }
-//         printf("\n");
-//     }
-
-//     return 0;
-// }
