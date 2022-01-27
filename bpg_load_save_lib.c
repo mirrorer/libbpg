@@ -73,7 +73,7 @@ int save_bpg_image(DecodedImage *decoded_image, char *outfilename, int qp,
         exit(1);
     }
 
-    img = read_image_array(0, decoded_image);
+    img = read_image_array(decoded_image->is_grayscale, decoded_image);
     if (!img) {
         fprintf(stderr, "Could not read image'\n");
         exit(1);

@@ -6,25 +6,17 @@
 
 #define IMAGE_HEADER_MAGIC 0x425047fb
 
+typedef enum {
+    HEVC_ENCODER_JCTVC,
+    HEVC_ENCODER_COUNT,
+} HEVCEncoderEnum;
+
 typedef struct BPGMetaData {
     uint32_t tag;
     uint8_t *buf;
     int buf_len;
     struct BPGMetaData *next;
 } BPGMetaData;
-
-typedef enum {
-    HEVC_ENCODER_JCTVC,
-    HEVC_ENCODER_COUNT,
-} HEVCEncoderEnum;
-
-static char *hevc_encoder_name[HEVC_ENCODER_COUNT] = {
-    "jctvc",
-};
-
-static HEVCEncoder *hevc_encoder_tab[HEVC_ENCODER_COUNT] = {
-    &jctvc_encoder,
-};
 
 typedef struct {
     int w, h;
@@ -58,6 +50,14 @@ typedef struct {
 
 typedef struct BPGEncoderContext BPGEncoderContext;
 
+typedef struct {
+    HEVCEncoderContext *(*open)(const HEVCEncodeParams *params);
+    int (*encode)(HEVCEncoderContext *s, Image *img);
+    int (*close)(HEVCEncoderContext *s, uint8_t **pbuf);
+} HEVCEncoder;
+
+extern HEVCEncoder jctvc_encoder;
+
 typedef struct BPGEncoderParameters {
     int qp; /* 0 ... 51 */
     int alpha_qp; /* -1 ... 51. -1 means same as qp */
@@ -75,6 +75,14 @@ typedef struct BPGEncoderParameters {
     uint16_t frame_delay_num;
     uint16_t frame_delay_den;
 } BPGEncoderParameters;
+
+static char *hevc_encoder_name[HEVC_ENCODER_COUNT] = {
+    "jctvc",
+};
+
+static HEVCEncoder *hevc_encoder_tab[HEVC_ENCODER_COUNT] = {
+    &jctvc_encoder,
+};
 
 typedef int BPGEncoderWriteFunc(void *opaque, const uint8_t *buf, int buf_len);
 
