@@ -1,99 +1,102 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <math.h>
+#include <getopt.h>
+#include <inttypes.h>
 
 #include "bpg_load_save_lib.h"
-#include "bpgenc_lite.h"
+// #include "bpgenc.h"
 
 
-int save_bpg_image(DecodedImage *decoded_image, char *outfilename, int qp, 
-                int lossless, int compress_level, int preffered_chroma_format){  
-    if (qp < 0 || qp > 51){
-        fprintf(stderr, "qp must be between 0 and 51\n");
-        exit(1);
-    }
-    if (lossless != 0 && lossless != 1){
-        fprintf(stderr, "field lossless must be 0 or 1\n");
-        exit(1);
-    }
-    if (compress_level < 1 || compress_level > 9){
-        fprintf(stderr, "compress_level must be between 1 and 9\n");
-        exit(1);
-    }
-    if (preffered_chroma_format != 420 && preffered_chroma_format != 422 && preffered_chroma_format != 444){
-        fprintf(stderr, "preffered_chroma_format must be 420, 422 or 444\n");
-        exit(1);
-    }
+// int save_bpg_image(DecodedImage *decoded_image, char *outfilename, int qp, 
+//                 int lossless, int compress_level, int preffered_chroma_format){  
+//     if (qp < 0 || qp > 51){
+//         fprintf(stderr, "qp must be between 0 and 51\n");
+//         exit(1);
+//     }
+//     if (lossless != 0 && lossless != 1){
+//         fprintf(stderr, "field lossless must be 0 or 1\n");
+//         exit(1);
+//     }
+//     if (compress_level < 1 || compress_level > 9){
+//         fprintf(stderr, "compress_level must be between 1 and 9\n");
+//         exit(1);
+//     }
+//     if (preffered_chroma_format != 420 && preffered_chroma_format != 422 && preffered_chroma_format != 444){
+//         fprintf(stderr, "preffered_chroma_format must be 420, 422 or 444\n");
+//         exit(1);
+//     }
 
-    Image *img;
-    FILE *f;
-    int bit_depth, limited_range, premultiplied_alpha;
-    BPGEncoderContext *enc_ctx;
-    BPGEncoderParameters *p;
+//     Image *img;
+//     FILE *f;
+//     int bit_depth, limited_range, premultiplied_alpha;
+//     BPGEncoderContext *enc_ctx;
+//     BPGEncoderParameters *p;
 
-    // fixed settings:
-    bit_depth = DEFAULT_BIT_DEPTH;
+//     // fixed settings:
+//     bit_depth = DEFAULT_BIT_DEPTH;
 
-    p = bpg_encoder_param_alloc();
-    p->qp = qp;
-    p->compress_level = compress_level;
+//     p = bpg_encoder_param_alloc();
+//     p->qp = qp;
+//     p->compress_level = compress_level;
 
-    if(lossless = 1){
-        p->lossless = 1;
-        p->preferred_chroma_format = BPG_FORMAT_444;
-    }
+//     if(lossless = 1){
+//         p->lossless = 1;
+//         p->preferred_chroma_format = BPG_FORMAT_444;
+//     }
     
 
-    switch (preffered_chroma_format)
-    {
-    case 420:
-        p->preferred_chroma_format = BPG_FORMAT_420;
-        break;
-    case 422:
-        p->preferred_chroma_format = BPG_FORMAT_422;
-        break;
-    default:
-        p->preferred_chroma_format = BPG_FORMAT_444;
-        break;
-    }
+//     switch (preffered_chroma_format)
+//     {
+//     case 420:
+//         p->preferred_chroma_format = BPG_FORMAT_420;
+//         break;
+//     case 422:
+//         p->preferred_chroma_format = BPG_FORMAT_422;
+//         break;
+//     default:
+//         p->preferred_chroma_format = BPG_FORMAT_444;
+//         break;
+//     }
 
-    p->qp; //0-51
-    p->lossless; // wtedy qp jest ignorowane, recznie dodac preferred_chroma na 444
-    p->compress_level; //1-9
-    p->preferred_chroma_format; //444 422 420
+//     p->qp; //0-51
+//     p->lossless; // wtedy qp jest ignorowane, recznie dodac preferred_chroma na 444
+//     p->compress_level; //1-9
+//     p->preferred_chroma_format; //444 422 420
     
-    f = fopen(outfilename, "wb");
-    if (!f) {
-        perror(outfilename);
-        exit(1);
-    }
+//     f = fopen(outfilename, "wb");
+//     if (!f) {
+//         perror(outfilename);
+//         exit(1);
+//     }
 
-    enc_ctx = bpg_encoder_open(p);
-    if (!enc_ctx) {
-        fprintf(stderr, "Could not open BPG encoder\n");
-        exit(1);
-    }
+//     enc_ctx = bpg_encoder_open(p);
+//     if (!enc_ctx) {
+//         fprintf(stderr, "Could not open BPG encoder\n");
+//         exit(1);
+//     }
 
-    img = read_image_array(decoded_image->is_grayscale, decoded_image);
-    if (!img) {
-        fprintf(stderr, "Could not read image'\n");
-        exit(1);
-    }
-    bpg_encoder_encode(enc_ctx, img, file_write_func, f);
-    image_free(img);
+//     img = read_image_array(decoded_image->is_grayscale, decoded_image);
+//     if (!img) {
+//         fprintf(stderr, "Could not read image'\n");
+//         exit(1);
+//     }
+//     bpg_encoder_encode(enc_ctx, img, file_write_func, f);
+//     image_free(img);
 
-    fclose(f);
-    bpg_encoder_close(enc_ctx);
-    bpg_encoder_param_free(p);
+//     fclose(f);
+//     bpg_encoder_close(enc_ctx);
+//     bpg_encoder_param_free(p);
 
-    return 0;
-}
+//     return 0;
+// }
 
-int save_bpg_image_with_defaults(DecodedImage *decoded_image){
-    save_bpg_image(decoded_image, DEFAULT_OUTFILENAME, DEFAULT_QP, 
-        DEFAULT_LOSSLESS, DEFAULT_COMPRESS_LEVEL, DEFAULT_PREFFERED_CHROMA_FORMAT);
+// int save_bpg_image_with_defaults(DecodedImage *decoded_image){
+//     save_bpg_image(decoded_image, DEFAULT_OUTFILENAME, DEFAULT_QP, 
+//         DEFAULT_LOSSLESS, DEFAULT_COMPRESS_LEVEL, DEFAULT_PREFFERED_CHROMA_FORMAT);
     
-    return 0;
-}
+//     return 0;
+// }
 
 DecodedImage load_bpg_image(char *filename){
     DecodedImage decoded_image;

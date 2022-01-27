@@ -3,7 +3,7 @@
 
 #include "bpgenc_lite.h"
 
-static int file_write_func(void *opaque, const uint8_t *buf, int buf_len)
+int file_write_func(void *opaque, const uint8_t *buf, int buf_len)
 {
     FILE *f = opaque;
     return fwrite(buf, 1, buf_len, f);
