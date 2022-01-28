@@ -249,9 +249,14 @@ clean: x265_clean
 -include $(wildcard jctvc/TLibCommon/*.d)
 -include $(wildcard jctvc/libmd5/*.d)
 
-# and compile command like this:
-# g++ -shared -o bpg_load_save_lib.so bpg_load_save_lib.c libbpg.a
+
+# command to compile lib .so/.lib using encoding jctvc
+ifdef CONFIG_WIN32
+LIB_SUFIX:=dll
+else
+LIB_SUFIX:=so
+endif
 
 lib_bpg:
-	gcc -Os -Wall -fPIC -MMD -fno-asynchronous-unwind-tables -fdata-sections -ffunction-sections -fno-math-errno -fno-signed-zeros -fno-tree-vectorize -fomit-frame-pointer -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_REENTRANT -I. -DCONFIG_BPG_VERSION=\"0.9.8\" -g   -c -o bpg_load_save_lib.o bpg_load_save_lib.c 
-	g++ -g -Wl,--gc-sections -shared -o bpg_load_save_lib5.so bpg_load_save_lib.o bpgenc.o jctvc_glue.o jctvc/libjctvc.a libbpg.a -lpng -ljpeg -lz 
+	$(CROSS_PREFIX)gcc -Os -Wall -fPIC -MMD -fno-asynchronous-unwind-tables -fdata-sections -ffunction-sections -fno-math-errno -fno-signed-zeros -fno-tree-vectorize -fomit-frame-pointer -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_REENTRANT -I. -DCONFIG_BPG_VERSION=\"0.9.8\" -g   -c -o bpg_load_save_lib.o bpg_load_save_lib.c 
+	$(CROSS_PREFIX)g++ -g -Wl,--gc-sections -shared -o bpg_load_save_lib.$(LIB_SUFIX) bpg_load_save_lib.o bpgenc.o jctvc_glue.o jctvc/libjctvc.a libbpg.a -lpng -ljpeg -lz 
