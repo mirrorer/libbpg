@@ -91,12 +91,12 @@
 //     return 0;
 // }
 
-// int save_bpg_image_with_defaults(DecodedImage *decoded_image){
-//     save_bpg_image(decoded_image, DEFAULT_OUTFILENAME, DEFAULT_QP, 
-//         DEFAULT_LOSSLESS, DEFAULT_COMPRESS_LEVEL, DEFAULT_PREFFERED_CHROMA_FORMAT);
+int save_bpg_image_with_defaults(DecodedImage *decoded_image){
+    save_bpg_image(decoded_image, DEFAULT_OUTFILENAME, DEFAULT_QP, 
+        DEFAULT_LOSSLESS, DEFAULT_COMPRESS_LEVEL, DEFAULT_PREFFERED_CHROMA_FORMAT);
     
-//     return 0;
-// }
+    return 0;
+}
 
 DecodedImage load_bpg_image(char *filename){
     DecodedImage decoded_image;

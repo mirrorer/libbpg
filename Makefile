@@ -193,28 +193,28 @@ libbpg.a: $(LIBBPG_OBJS)
 bpgdec$(EXE): bpgdec.o libbpg.a
 	$(CC) $(LDFLAGS) -o $@ $^ $(BPGDEC_LIBS)
 
-bpgenc$(EXE): $(BPGENC_OBJS)
+bpgenc$(EXE): $(BPGENC_OBJS) libbpg.a
 	$(CXX) $(LDFLAGS) -o $@ $^ $(BPGENC_LIBS)
 
 bpgview$(EXE): bpgview.o libbpg.a
 	$(CC) $(LDFLAGS) -o $@ $^ $(BPGVIEW_LIBS)
 
-bpgdec.js: $(LIBBPG_JS_OBJS) post.js
-	$(EMCC) $(EMLDFLAGS) -s TOTAL_MEMORY=33554432 -o $@ $(LIBBPG_JS_OBJS)
+# bpgdec.js: $(LIBBPG_JS_OBJS) post.js
+# 	$(EMCC) $(EMLDFLAGS) -s TOTAL_MEMORY=33554432 -o $@ $(LIBBPG_JS_OBJS)
 
-bpgdec8.js: $(LIBBPG_JS8_OBJS) post.js
-	$(EMCC) $(EMLDFLAGS) -s TOTAL_MEMORY=33554432 -o $@ $(LIBBPG_JS8_OBJS)
+# bpgdec8.js: $(LIBBPG_JS8_OBJS) post.js
+# 	$(EMCC) $(EMLDFLAGS) -s TOTAL_MEMORY=33554432 -o $@ $(LIBBPG_JS8_OBJS)
 
-bpgdec8a.js: $(LIBBPG_JS8A_OBJS) post.js
-	$(EMCC) $(EMLDFLAGS) -s TOTAL_MEMORY=33554432 -o $@ $(LIBBPG_JS8A_OBJS)
+# bpgdec8a.js: $(LIBBPG_JS8A_OBJS) post.js
+# 	$(EMCC) $(EMLDFLAGS) -s TOTAL_MEMORY=33554432 -o $@ $(LIBBPG_JS8A_OBJS)
 
-size:
-	strip bpgdec
-	size bpgdec libbpg.o libavcodec/*.o libavutil/*.o | sort -n
-	gzip < bpgdec | wc
+# size:
+# 	strip bpgdec
+# 	size bpgdec libbpg.o libavcodec/*.o libavutil/*.o | sort -n
+# 	gzip < bpgdec | wc
 
-install: bpgenc bpgdec
-	install -s -m 755 $^ $(prefix)/bin
+# install: bpgenc bpgdec
+# 	install -s -m 755 $^ $(prefix)/bin
 
 CLEAN_DIRS=doc html libavcodec libavutil \
      jctvc jctvc/TLibEncoder jctvc/TLibVideoIO jctvc/TLibCommon jctvc/libmd5
@@ -224,20 +224,20 @@ clean: x265_clean
           $(addsuffix /*.d, $(CLEAN_DIRS)) $(addsuffix /*~, $(CLEAN_DIRS)) \
           $(addsuffix /*.a, $(CLEAN_DIRS))
 
-%.o: %.c
-	$(CC) $(CFLAGS) -c -o $@ $<
+# %.o: %.c
+# 	$(CC) $(CFLAGS) -c -o $@ $<
 
-%.o: %.cpp
-	$(CXX) $(CXXFLAGS) -c -o $@ $<
+# %.o: %.cpp
+# 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
-%.js.o: %.c
-	$(EMCC) $(EMCFLAGS) -c -o $@ $<
+# %.js.o: %.c
+# 	$(EMCC) $(EMCFLAGS) -c -o $@ $<
 
-%.js8.o: %.c
-	$(EMCC) $(EMCFLAGS) -c -o $@ $<
+# %.js8.o: %.c
+# 	$(EMCC) $(EMCFLAGS) -c -o $@ $<
 
-%.js8a.o: %.c
-	$(EMCC) $(EMCFLAGS) -c -o $@ $<
+# %.js8a.o: %.c
+# 	$(EMCC) $(EMCFLAGS) -c -o $@ $<
 
 -include $(wildcard *.d)
 -include $(wildcard libavcodec/*.d)
