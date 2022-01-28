@@ -71,7 +71,7 @@ ifdef USE_EMCC
 PROGS+=bpgdec.js bpgdec8.js bpgdec8a.js
 endif
 
-all: $(PROGS)
+all: $(PROGS) lib_bpg
 
 LIBBPG_OBJS:=$(addprefix libavcodec/, \
 hevc_cabac.o  hevc_filter.o  hevc.o         hevcpred.o  hevc_refs.o\
@@ -199,6 +199,7 @@ bpgenc$(EXE): $(BPGENC_OBJS) libbpg.a
 bpgview$(EXE): bpgview.o libbpg.a
 	$(CC) $(LDFLAGS) -o $@ $^ $(BPGVIEW_LIBS)
 
+
 # bpgdec.js: $(LIBBPG_JS_OBJS) post.js
 # 	$(EMCC) $(EMLDFLAGS) -s TOTAL_MEMORY=33554432 -o $@ $(LIBBPG_JS_OBJS)
 
@@ -250,3 +251,7 @@ clean: x265_clean
 
 # and compile command like this:
 # g++ -shared -o bpg_load_save_lib.so bpg_load_save_lib.c libbpg.a
+
+lib_bpg:
+	gcc -Os -Wall -fPIC -MMD -fno-asynchronous-unwind-tables -fdata-sections -ffunction-sections -fno-math-errno -fno-signed-zeros -fno-tree-vectorize -fomit-frame-pointer -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_REENTRANT -I. -DCONFIG_BPG_VERSION=\"0.9.8\" -g   -c -o bpg_load_save_lib.o bpg_load_save_lib.c 
+	g++ -g -Wl,--gc-sections -shared -o bpg_load_save_lib5.so bpg_load_save_lib.o bpgenc.o jctvc_glue.o jctvc/libjctvc.a libbpg.a -lpng -ljpeg -lz 

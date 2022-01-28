@@ -3098,19 +3098,19 @@ int save_bpg_image(DecodedImage *decoded_image, char *outfilename, int qp,
                 int lossless, int compress_level, int preffered_chroma_format){  
     if (qp < 0 || qp > 51){
         fprintf(stderr, "qp must be between 0 and 51\n");
-        exit(1);
+        return 1;
     }
     if (lossless != 0 && lossless != 1){
         fprintf(stderr, "field lossless must be 0 or 1\n");
-        exit(1);
+        return 2;
     }
     if (compress_level < 1 || compress_level > 9){
         fprintf(stderr, "compress_level must be between 1 and 9\n");
-        exit(1);
+        return 3;
     }
     if (preffered_chroma_format != 420 && preffered_chroma_format != 422 && preffered_chroma_format != 444){
         fprintf(stderr, "preffered_chroma_format must be 420, 422 or 444\n");
-        exit(1);
+        return 4;
     }
 
     Image *img;
