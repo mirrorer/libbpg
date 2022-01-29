@@ -33,9 +33,6 @@
 #include <jpeglib.h>
 
 #include "bpgenc.h"
-// #include "libbpg.h"
-// #include "bpg_load_save_lib.h"
-// #include "decoded_image_struct.h""
 
 typedef uint16_t PIXEL;
 
@@ -2978,24 +2975,23 @@ int main(int argc, char **argv)
 }
 
 
+// Code added by Michal Mianowski to create bpg_load_save_lib in format .so/.dll
+
 void array_read_image(uint8_t **rows, DecodedImage *img_bpg, BPGImageFormatEnum format){
-    int linesize = img_bpg->w;
-    if(format != BPG_FORMAT_GRAY){
-        linesize = img_bpg->w * (3 + img_bpg->has_alpha);
-    }
+    int line_len = img_bpg->w * img_bpg->pixel_len;
     
     for (int y = 0; y < img_bpg->h; y++) {
-        for (int x = 0; x < linesize; x++) {
-            rows[y][x] = (uint8_t)img_bpg->image_array[y][x];
+        for (int x = 0; x < line_len; x++) {
+            rows[y][x] = (uint8_t)img_bpg->raw_data[y*line_len + x];
         }
     }
 }
 
-Image *read_image_array(int in_grayscale, DecodedImage *decoded_image){
+Image *decoded_image_read_raw_data(DecodedImage *decoded_image){
     int bit_depth, color_type, limited_range, premultiplied_alpha, out_bit_depth;
     Image *img;
     uint8_t **rows;
-    int y, has_alpha, linesize, bpp;
+    int y, has_alpha, line_len, bpp;
     BPGImageFormatEnum chroma_format;
     ColorConvertState cvt_s, *cvt = &cvt_s;
     
@@ -3005,7 +3001,7 @@ Image *read_image_array(int in_grayscale, DecodedImage *decoded_image){
     color_space = BPG_CS_RGB;
     chroma_format = BPG_FORMAT_444;
     
-    if(in_grayscale){
+    if(decoded_image->is_grayscale){
         color_space = BPG_CS_YCbCr;
         chroma_format = BPG_FORMAT_GRAY;
     }
@@ -3022,8 +3018,6 @@ Image *read_image_array(int in_grayscale, DecodedImage *decoded_image){
     img->has_w_plane = 0;
     img->limited_range = limited_range;
     img->premultiplied_alpha = premultiplied_alpha;
-    // img->pixel_shift = 0;
-    
 
     rows = malloc(sizeof(rows[0]) * img->h);
 
@@ -3032,9 +3026,9 @@ Image *read_image_array(int in_grayscale, DecodedImage *decoded_image){
     else
         bpp = (3 + has_alpha) * (bit_depth / 8);
 
-    linesize = bpp * img->w;
+    line_len = bpp * img->w;
     for (y = 0; y < img->h; y++) {
-        rows[y] = malloc(linesize);
+        rows[y] = malloc(line_len);
     }
     
     array_read_image(rows, decoded_image, chroma_format);
@@ -3145,7 +3139,7 @@ int save_bpg_image(DecodedImage *decoded_image, char *outfilename, int qp,
     }
 
     p->qp; //0-51
-    p->lossless; // wtedy qp jest ignorowane, recznie dodac preferred_chroma na 444
+    p->lossless; // when 1 then qp is ignored and preferred_chroma_format should be manually set to 444 
     p->compress_level; //1-9
     p->preferred_chroma_format; //444 422 420
     
@@ -3161,7 +3155,7 @@ int save_bpg_image(DecodedImage *decoded_image, char *outfilename, int qp,
         exit(1);
     }
 
-    img = read_image_array(0, decoded_image);
+    img = decoded_image_read_raw_data(decoded_image);
     if (!img) {
         fprintf(stderr, "Could not read image'\n");
         exit(1);
@@ -3175,10 +3169,3 @@ int save_bpg_image(DecodedImage *decoded_image, char *outfilename, int qp,
 
     return 0;
 }
-
-// int save_bpg_image_with_defaults(DecodedImage *decoded_image){
-//     save_bpg_image(decoded_image, DEFAULT_OUTFILENAME, DEFAULT_QP, 
-//         DEFAULT_LOSSLESS, DEFAULT_COMPRESS_LEVEL, DEFAULT_PREFFERED_CHROMA_FORMAT);
-    
-//     return 0;
-// }

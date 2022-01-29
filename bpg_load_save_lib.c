@@ -5,91 +5,6 @@
 #include <inttypes.h>
 
 #include "bpg_load_save_lib.h"
-// #include "bpgenc.h"
-
-
-// int save_bpg_image(DecodedImage *decoded_image, char *outfilename, int qp, 
-//                 int lossless, int compress_level, int preffered_chroma_format){  
-//     if (qp < 0 || qp > 51){
-//         fprintf(stderr, "qp must be between 0 and 51\n");
-//         exit(1);
-//     }
-//     if (lossless != 0 && lossless != 1){
-//         fprintf(stderr, "field lossless must be 0 or 1\n");
-//         exit(1);
-//     }
-//     if (compress_level < 1 || compress_level > 9){
-//         fprintf(stderr, "compress_level must be between 1 and 9\n");
-//         exit(1);
-//     }
-//     if (preffered_chroma_format != 420 && preffered_chroma_format != 422 && preffered_chroma_format != 444){
-//         fprintf(stderr, "preffered_chroma_format must be 420, 422 or 444\n");
-//         exit(1);
-//     }
-
-//     Image *img;
-//     FILE *f;
-//     int bit_depth, limited_range, premultiplied_alpha;
-//     BPGEncoderContext *enc_ctx;
-//     BPGEncoderParameters *p;
-
-//     // fixed settings:
-//     bit_depth = DEFAULT_BIT_DEPTH;
-
-//     p = bpg_encoder_param_alloc();
-//     p->qp = qp;
-//     p->compress_level = compress_level;
-
-//     if(lossless = 1){
-//         p->lossless = 1;
-//         p->preferred_chroma_format = BPG_FORMAT_444;
-//     }
-    
-
-//     switch (preffered_chroma_format)
-//     {
-//     case 420:
-//         p->preferred_chroma_format = BPG_FORMAT_420;
-//         break;
-//     case 422:
-//         p->preferred_chroma_format = BPG_FORMAT_422;
-//         break;
-//     default:
-//         p->preferred_chroma_format = BPG_FORMAT_444;
-//         break;
-//     }
-
-//     p->qp; //0-51
-//     p->lossless; // wtedy qp jest ignorowane, recznie dodac preferred_chroma na 444
-//     p->compress_level; //1-9
-//     p->preferred_chroma_format; //444 422 420
-    
-//     f = fopen(outfilename, "wb");
-//     if (!f) {
-//         perror(outfilename);
-//         exit(1);
-//     }
-
-//     enc_ctx = bpg_encoder_open(p);
-//     if (!enc_ctx) {
-//         fprintf(stderr, "Could not open BPG encoder\n");
-//         exit(1);
-//     }
-
-//     img = read_image_array(decoded_image->is_grayscale, decoded_image);
-//     if (!img) {
-//         fprintf(stderr, "Could not read image'\n");
-//         exit(1);
-//     }
-//     bpg_encoder_encode(enc_ctx, img, file_write_func, f);
-//     image_free(img);
-
-//     fclose(f);
-//     bpg_encoder_close(enc_ctx);
-//     bpg_encoder_param_free(p);
-
-//     return 0;
-// }
 
 int save_bpg_image_with_defaults(DecodedImage *decoded_image){
     save_bpg_image(decoded_image, DEFAULT_OUTFILENAME, DEFAULT_QP, 
@@ -108,8 +23,8 @@ DecodedImage load_bpg_image(char *filename){
     BPGDecoderOutputFormat out_fmt;
     int buf_len, bit_depth, c, show_info;
     const char *p;
-    int ** image_array;
-    int w, h, y, has_alpha;
+    int * raw_data;
+    int w, h, pixel_len, has_alpha, line_len, y;
 
     bit_depth = DEFAULT_BIT_DEPTH;
 
@@ -144,34 +59,33 @@ DecodedImage load_bpg_image(char *filename){
     h = img_info->height;
     has_alpha = img_info->has_alpha;
 
-    int pixel_len = 3;
+    pixel_len = 3;
     out_fmt = BPG_OUTPUT_FORMAT_RGB24;
     if (has_alpha){
         pixel_len = 4;
         out_fmt = BPG_OUTPUT_FORMAT_RGBA32;
     }
 
-    image_array = malloc(h * sizeof( int * ));
-    for (y = 0; y < h; y++) {
-        image_array[y] = malloc(pixel_len * w * sizeof( int ));
-    }
+    line_len = pixel_len * w;
+    raw_data = malloc(h * line_len * sizeof( int ));
     
-    rgb_line = malloc(pixel_len * w);    
+    rgb_line = malloc(line_len);    
 
     bpg_decoder_start(img, out_fmt);
     for (y = 0; y < h; y++) {
         bpg_decoder_get_line(img, rgb_line);
         for(int i=0; i<pixel_len*w; i++){
-            image_array[y][i] = rgb_line[i];
+            raw_data[y*line_len + i] = rgb_line[i];
         }
     }
     free(rgb_line);
 
     decoded_image.w = w;
     decoded_image.h = h;
+    decoded_image.pixel_len = pixel_len;
     decoded_image.has_alpha = has_alpha;
     decoded_image.is_grayscale = 0;
-    decoded_image.image_array = image_array;
+    decoded_image.raw_data = raw_data;
 
     return decoded_image;
 }

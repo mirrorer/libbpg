@@ -29,7 +29,7 @@
 #include <inttypes.h>
 
 /* define it to include PNG output */
-#define USE_PNG
+// #define USE_PNG
 
 #ifdef USE_PNG
 #include <png.h>

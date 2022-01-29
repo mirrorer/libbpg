@@ -2,20 +2,22 @@
 # 
 # Compile options:
 #
+# Enable the JCTVC code (best quality but slow) for the encoder
+USE_JCTVC=y
+
+# Enable the cross compilation for Windows
+# CONFIG_WIN32=y
+# Enable for compilation on MacOS X
+#CONFIG_APPLE=y
+
 # Enable compilation of Javascript decoder with Emscripten
 #USE_EMCC=y
 # Enable x265 for the encoder
 # USE_X265=y
-# Enable the JCTVC code (best quality but slow) for the encoder
-USE_JCTVC=y
 # Compile bpgview (SDL and SDL_image libraries needed)
-USE_BPGVIEW=y
+# USE_BPGVIEW=y
 # Enable it to use bit depths > 12 (need more tests to validate encoder)
 #USE_JCTVC_HIGH_BIT_DEPTH=y
-# Enable the cross compilation for Windows
-#CONFIG_WIN32=y
-# Enable for compilation on MacOS X
-#CONFIG_APPLE=y
 # Installation prefix
 prefix=/usr/local
 

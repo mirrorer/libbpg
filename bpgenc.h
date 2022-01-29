@@ -27,14 +27,17 @@ extern "C" {
 
 #include "libbpg.h"
 
+// added to header for bpg_load_save_lib
 typedef struct DecodedImage
 {
-    int w, h, has_alpha, is_grayscale;
-    int ** image_array;
+    int w, h, pixel_len, has_alpha, is_grayscale;
+    int * raw_data;
 } DecodedImage;
 
 int save_bpg_image(DecodedImage *decoded_image, char *outfilename, int qp, 
                 int lossless, int compress_level, int preffered_chroma_format);
+
+// rest of original header:
 
 typedef struct {
     int w, h;
