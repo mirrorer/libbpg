@@ -3146,19 +3146,19 @@ int save_bpg_image(DecodedImage *decoded_image, char *outfilename, int qp,
     f = fopen(outfilename, "wb");
     if (!f) {
         perror(outfilename);
-        exit(1);
+        return 5;
     }
 
     enc_ctx = bpg_encoder_open(p);
     if (!enc_ctx) {
         fprintf(stderr, "Could not open BPG encoder\n");
-        exit(1);
+        return 6;
     }
 
     img = decoded_image_read_raw_data(decoded_image);
     if (!img) {
         fprintf(stderr, "Could not read image'\n");
-        exit(1);
+        return 7;
     }
     bpg_encoder_encode(enc_ctx, img, my_write_func, f);
     image_free(img);

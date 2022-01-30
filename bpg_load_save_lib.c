@@ -31,7 +31,7 @@ DecodedImage load_bpg_image(char *filename){
     f = fopen(filename, "rb");
     if (!f) {
         fprintf(stderr, "Could not open %s\n", filename);
-        exit(1);
+        return decoded_image;
     }
 
     fseek(f, 0, SEEK_END);
@@ -41,7 +41,7 @@ DecodedImage load_bpg_image(char *filename){
     buf = malloc(buf_len);
     if (fread(buf, 1, buf_len, f) != buf_len) {
         fprintf(stderr, "Error while reading file\n");
-        exit(1);
+        return decoded_image;
     }
     
     fclose(f);
@@ -50,7 +50,7 @@ DecodedImage load_bpg_image(char *filename){
 
     if (bpg_decoder_decode(img, buf, buf_len) < 0) {
         fprintf(stderr, "Could not decode image\n");
-        exit(1);
+        return decoded_image;
     }
     free(buf);
     

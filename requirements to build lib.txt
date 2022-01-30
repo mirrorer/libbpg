@@ -1,0 +1,14 @@
+There are required tools to be installed on linux to compile this library:
+
+make 
+cmake 
+gcc 
+g++ 
+yasm 
+
+binutils-mingw-w64-x86-64
+g++-mingw-w64-x86-64
+libpng-dev 
+libjpeg-dev 
+libsdl-dev 
+libsdl-image1.2-dev 
